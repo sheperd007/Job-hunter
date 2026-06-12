@@ -1,0 +1,58 @@
+# Hardening overlay. Use WITH the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.hardened.yml up -d
+#
+# What it changes:
+#  - Secrets come from files in ./secrets/* (mounted at /run/secrets), NOT env.
+#    They no longer appear in `docker inspect` or /proc/<pid>/environ.
+#  - Postgres + n8n read their passwords / n8n encryption key from *_FILE.
+#  - no-new-privileges on all; worker runs cap-dropped + read-only rootfs.
+#
+# NOTE: none of this protects you from a user with ROOT / docker-group access on
+# the host — they can still read container memory and the docker socket. For that
+# you need your own VM/VPS or a confidential-computing VM. See docs/SECURITY.md.
+
+secrets:
+  db_password:             { file: ./secrets/db_password }
+  openai_key_a:            { file: ./secrets/openai_key_a }
+  openai_key_b:            { file: ./secrets/openai_key_b }
+  notion_token:            { file: ./secrets/notion_token }
+  adzuna_app_key:          { file: ./secrets/adzuna_app_key }
+  n8n_encryption_key:      { file: ./secrets/n8n_encryption_key }
+  n8n_basic_auth_password: { file: ./secrets/n8n_basic_auth_password }
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    security_opt: ["no-new-privileges:true"]
+
+  worker:
+    # Force build-from-parts so the password comes from the secret file, not a DSN in env.
+    environment:
+      DATABASE_URL: ""
+      DB_HOST: postgres
+      DB_USER: ${POSTGRES_USER:-n8n}
+      DB_NAME: ${POSTGRES_DB:-n8n}
+    secrets:
+      - db_password
+      - openai_key_a
+      - openai_key_b
+      - notion_token
+      - adzuna_app_key
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  n8n:
+    environment:
+      DB_POSTGRESDB_PASSWORD_FILE: /run/secrets/db_password
+      N8N_ENCRYPTION_KEY_FILE: /run/secrets/n8n_encryption_key
+      N8N_BASIC_AUTH_PASSWORD_FILE: /run/secrets/n8n_basic_auth_password
+    secrets:
+      - db_password
+      - n8n_encryption_key
+      - n8n_basic_auth_password
+    security_opt: ["no-new-privileges:true"]

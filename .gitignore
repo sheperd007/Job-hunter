@@ -2,6 +2,10 @@
 .env
 .env.*
 !.env.example
+# Hardening: encryption keys + plaintext secret files (see docs/SECURITY.md)
+age-key*
+*.agekey
+secrets.tar.age
 
 # Resume / personal docs
 *.pdf

@@ -151,6 +151,19 @@ curl -s http://localhost:8000/budget/status   # {"a": 1.23, "b": 0.40}
   `.env.example` is committed.
 - `DRY_RUN=true` → discovers + filters but spends nothing and writes nothing.
 
+## Hardening (shared / multi-user host)
+
+To run where other people also have access — secrets as mounted files (out of env),
+encrypted at rest (age/SOPS), rootless Docker, LUKS volumes, firewall — use the
+overlay and follow [`docs/SECURITY.md`](docs/SECURITY.md):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.hardened.yml up -d --build
+```
+
+> Honest caveat: none of this hides secrets from a user with **root / docker-group**
+> on the host. Against that, use a VM/VPS only you control. SECURITY.md explains.
+
 ## Migration / portability
 
 ```bash
