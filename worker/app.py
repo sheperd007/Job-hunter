@@ -10,6 +10,7 @@ from worker.pipeline import run_discovery, gather_jobs
 from worker.profile_build import build_profile
 from worker.triage import triage_email
 from worker.calendar_parse import parse_event
+from worker.digest import build_digest
 
 app = FastAPI(title="job-agent-worker")
 settings = Settings()
@@ -118,3 +119,25 @@ async def triage_ep(email: dict):
 async def calendar_ep(email: dict):
     """W2: detect a meeting/interview request + propose an event (no auto-create)."""
     return await parse_event(email, _gateway())
+
+
+def _recent_jobs(date: str) -> list[dict]:
+    try:
+        import psycopg
+        with psycopg.connect(settings.database_url) as conn:
+            rows = conn.execute(
+                "SELECT title, vacancy_url, source, notion_page_url FROM seen_jobs "
+                "WHERE discovered::date = %s ORDER BY discovered DESC", (date,),
+            ).fetchall()
+        return [{"title": t, "url": u, "source": s, "notion_page_url": n}
+                for (t, u, s, n) in rows]
+    except Exception:
+        return []
+
+
+@app.get("/digest")
+def digest_ep():
+    """W4: assemble the daily digest (email HTML + Telegram text)."""
+    date = _today()
+    budget = {k: v.month_usd for k, v in _ledger().month_spend(_month()).items()}
+    return build_digest(jobs=_recent_jobs(date), budget=budget, date=date)

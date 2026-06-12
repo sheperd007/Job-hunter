@@ -1,0 +1,22 @@
+from worker.digest import build_digest
+
+
+def test_digest_counts_and_formats():
+    jobs = [
+        {"title": "ML Engineer", "notion_page_url": "https://notion.so/a",
+         "visa": "Sponsors visa", "score": 88},
+        {"title": "PostDoc NLP", "url": "https://x.com/b",
+         "visa": "Hires-intl (academia)"},
+    ]
+    d = build_digest(jobs=jobs, budget={"a": 1.5, "b": 0.0}, date="2026-06-12")
+    assert "2 new match" in d["subject"]
+    assert "ML Engineer" in d["html"] and "PostDoc NLP" in d["html"]
+    assert "https://notion.so/a" in d["html"]      # prefers notion url
+    assert "key A $1.50/8" in d["html"]
+    assert d["telegram"].startswith("2026-06-12 — Job Agent digest")
+
+
+def test_digest_empty():
+    d = build_digest(jobs=[], budget={}, date="2026-06-12")
+    assert "0 new match" in d["subject"]
+    assert "key A $0.00/8" in d["html"]
