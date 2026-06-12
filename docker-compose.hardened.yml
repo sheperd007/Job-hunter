@@ -56,3 +56,20 @@ services:
       - n8n_encryption_key
       - n8n_basic_auth_password
     security_opt: ["no-new-privileges:true"]
+
+# Pin the data volumes to ${DATA_DIR} (point it at a LUKS mount for encryption at
+# rest). Defaults to ./data so it also works without LUKS. `make harden-up`
+# creates the subdirs; `make luks-open` mounts the encrypted volume first.
+volumes:
+  postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/postgres
+  n8n-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/n8n

@@ -12,9 +12,10 @@ A self-hosted, Dockerized agent that helps you land a visa-sponsored job abroad:
 - **Daily digest** — emails + Telegrams the day's new matches and your LLM spend.
 - **Hard cost cap** — two OpenAI keys, **$8/month each, enforced in code**.
 
-> Design: [`docs/superpowers/specs/`](docs/superpowers/specs/) · Plan:
-> [`docs/superpowers/plans/`](docs/superpowers/plans/) · Run it:
-> [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
+> **Start here:** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) — step-by-step
+> credentials, launch, and commands. · Server commands: [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
+> · Hardening: [`docs/SECURITY.md`](docs/SECURITY.md) · Design/plan:
+> [`docs/superpowers/`](docs/superpowers/)
 
 ## Architecture
 
