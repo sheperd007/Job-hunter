@@ -17,6 +17,8 @@ services:
   worker:
     build: ./worker
     env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"   # localhost-only; for setup curls (profile build, manual /jobs/run)
     depends_on:
       postgres:
         condition: service_healthy
