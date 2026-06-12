@@ -6,7 +6,7 @@ from worker.db import ensure_schema
 
 def main() -> None:
     s = Settings()
-    ensure_schema(s.database_url)
+    ensure_schema(s.dsn)
     print("schema ensured")
 
 

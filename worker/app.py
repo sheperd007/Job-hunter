@@ -19,7 +19,7 @@ settings = Settings()
 
 def _ledger():
     try:
-        return PostgresLedger(settings.database_url)
+        return PostgresLedger(settings.dsn)
     except Exception:
         return InMemoryLedger()
 
@@ -39,7 +39,7 @@ def _gateway():
 def _load_profile() -> dict:
     try:
         import psycopg
-        with psycopg.connect(settings.database_url) as conn:
+        with psycopg.connect(settings.dsn) as conn:
             row = conn.execute("SELECT data FROM profile WHERE id = 1").fetchone()
         return row[0] if row else {}
     except Exception:
@@ -49,7 +49,7 @@ def _load_profile() -> dict:
 def _save_profile(data: dict) -> None:
     import json
     import psycopg
-    with psycopg.connect(settings.database_url) as conn:
+    with psycopg.connect(settings.dsn) as conn:
         conn.execute(
             "INSERT INTO profile (id, data) VALUES (1, %s) "
             "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated = now()",
@@ -80,7 +80,7 @@ async def llm_complete(req: CompleteReq):
 @app.post("/jobs/run")
 async def jobs_run():
     """W3 entrypoint: discover -> filter -> visa -> match -> Notion."""
-    store = PostgresSeenStore(settings.database_url)
+    store = PostgresSeenStore(settings.dsn)
     profile = _load_profile()
     discovered = _today()
     jobs = await gather_jobs(settings)
@@ -125,7 +125,7 @@ async def calendar_ep(email: dict):
 def _recent_jobs(date: str) -> list[dict]:
     try:
         import psycopg
-        with psycopg.connect(settings.database_url) as conn:
+        with psycopg.connect(settings.dsn) as conn:
             rows = conn.execute(
                 "SELECT title, vacancy_url, source, notion_page_url FROM seen_jobs "
                 "WHERE discovered::date = %s ORDER BY discovered DESC", (date,),
@@ -152,7 +152,7 @@ class PendingReq(BaseModel):
 @app.post("/pending")
 def pending_add(req: PendingReq):
     """Store a proposed action awaiting one-tap Telegram approval."""
-    store = PostgresPendingStore(settings.database_url)
+    store = PostgresPendingStore(settings.dsn)
     return {"id": store.add(req.kind, req.payload)}
 
 
@@ -163,5 +163,5 @@ class ResolveReq(BaseModel):
 @app.post("/pending/{action_id}/resolve")
 def pending_resolve(action_id: str, req: ResolveReq):
     """Idempotently resolve a pending action. already=False means act now."""
-    store = PostgresPendingStore(settings.database_url)
+    store = PostgresPendingStore(settings.dsn)
     return store.resolve(action_id, req.decision)
