@@ -1,0 +1,114 @@
+# DigitalOcean App Platform spec — deploy this stack from a Git repo.
+# Edit `github.repo` to your repo, then: doctl apps create --spec .do/app.yaml
+# (or paste into cloud.digitalocean.com/apps -> Create -> "Import from App Spec").
+#
+# Region fra (Frankfurt) = EU egress: reaches OpenAI + Google + EU job boards.
+name: ai-job-agent
+region: fra
+
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    production: false        # set true for a HA/backup-capable managed PG
+
+services:
+  # ---- Python worker: budget-guarded LLM gateway + job discovery logic ----
+  - name: worker
+    dockerfile_path: worker/Dockerfile
+    source_dir: worker
+    github:
+      repo: YOUR_GITHUB_USERNAME/ai-job-agent
+      branch: master
+      deploy_on_push: true
+    http_port: 8000          # internal only (no `routes` -> not public)
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    instance_count: 1
+    health_check:
+      http_path: /health
+    envs:
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
+      - key: DRY_RUN
+        value: "true"
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: MODEL_TRIAGE
+        value: gpt-4.1-mini
+      - key: MODEL_MATCH
+        value: gpt-4.1
+      - key: CAP_SAFETY_MARGIN_USD
+        value: "7.5"
+      - key: OPENAI_KEY_A
+        type: SECRET
+      - key: OPENAI_KEY_B
+        type: SECRET
+      - key: NOTION_TOKEN
+        type: SECRET
+      - key: NOTION_APPLICATIONS_DS
+        value: cd54c7e6-fca0-4234-b8fb-87745292ac83
+      - key: ADZUNA_APP_ID
+        type: SECRET
+      - key: ADZUNA_APP_KEY
+        type: SECRET
+
+  # ---- n8n orchestrator (public UI + webhooks, auto HTTPS) ----
+  - name: n8n
+    image:
+      registry_type: DOCKER_HUB
+      registry: n8nio
+      repository: n8n
+      tag: latest
+    http_port: 5678
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1
+    routes:
+      - path: /
+    envs:
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_HOST
+        value: ${db.HOSTNAME}
+      - key: DB_POSTGRESDB_PORT
+        value: ${db.PORT}
+      - key: DB_POSTGRESDB_DATABASE
+        value: ${db.DATABASE}
+      - key: DB_POSTGRESDB_USER
+        value: ${db.USERNAME}
+      - key: DB_POSTGRESDB_PASSWORD
+        value: ${db.PASSWORD}
+      - key: DB_POSTGRESDB_SSL_ENABLED
+        value: "true"
+      - key: N8N_PROTOCOL
+        value: https
+      - key: N8N_HOST
+        value: ${APP_DOMAIN}
+      - key: WEBHOOK_URL
+        value: ${APP_URL}
+      - key: GENERIC_TIMEZONE
+        value: Asia/Tehran
+      - key: WORKER_URL
+        value: ${worker.PRIVATE_URL}     # n8n -> worker, internal
+      - key: N8N_ENCRYPTION_KEY
+        type: SECRET                      # stable key so saved credentials survive redeploys
+      - key: N8N_BASIC_AUTH_ACTIVE
+        value: "true"
+      - key: N8N_BASIC_AUTH_USER
+        type: SECRET
+      - key: N8N_BASIC_AUTH_PASSWORD
+        type: SECRET
+
+jobs:
+  # ---- create tables on managed PG before each deploy ----
+  - name: migrate
+    kind: PRE_DEPLOY
+    dockerfile_path: worker/Dockerfile
+    source_dir: worker
+    github:
+      repo: YOUR_GITHUB_USERNAME/ai-job-agent
+      branch: master
+    run_command: python -m worker.migrate
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
