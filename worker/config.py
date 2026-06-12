@@ -17,3 +17,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://n8n:n8n@postgres:5432/n8n"
     dry_run: bool = False
+
+    # Notion (worker performs all Notion writes)
+    notion_token: str = ""
+    notion_applications_db: str = "70b08f56f7fc4825b9e45993a409cb11"  # Applications database id
+    notion_version: str = "2022-06-28"
+
+    # Job source keys
+    adzuna_app_id: str = ""
+    adzuna_app_key: str = ""

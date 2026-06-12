@@ -45,8 +45,8 @@ services:
         type: SECRET
       - key: NOTION_TOKEN
         type: SECRET
-      - key: NOTION_APPLICATIONS_DS
-        value: cd54c7e6-fca0-4234-b8fb-87745292ac83
+      - key: NOTION_APPLICATIONS_DB
+        value: "70b08f56f7fc4825b9e45993a409cb11"
       - key: ADZUNA_APP_ID
         type: SECRET
       - key: ADZUNA_APP_KEY
