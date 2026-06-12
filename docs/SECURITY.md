@@ -46,8 +46,13 @@ stack up with the overlay:
 docker compose -f docker-compose.yml -f docker-compose.hardened.yml up -d --build
 ```
 
-Keep your **`.env` free of secrets** in hardened mode — it should hold only
-non-sensitive config (timezone, model names, `OWNER_EMAIL`, `WORKER_URL`, …).
+**Use the secret-free `.env`** in hardened mode: `cp .env.hardened.example .env`.
+This is not optional — env vars (and `.env`) **outrank** the secret files in both
+pydantic-settings and Docker, so any secret left in `.env` would (a) be injected
+into the container env (visible in `docker inspect`) and (b) silently override the
+`/run/secrets/*` file. The overlay also blanks the base plaintext password keys
+(`POSTGRES_PASSWORD`, `DB_POSTGRESDB_PASSWORD`, `N8N_BASIC_AUTH_PASSWORD`) so the
+`*_FILE` values are the only ones that reach the containers.
 
 ## 2. Encrypt secrets at rest (age / SOPS)
 
@@ -98,9 +103,20 @@ sudo mkdir -p /mnt/agentdata && sudo mount /dev/mapper/agentdata /mnt/agentdata
 sudo chown "$USER" /mnt/agentdata
 ```
 
-Then point Docker's named volumes (or bind mounts) at `/mnt/agentdata`. After a
-reboot you must `cryptsetup open` + `mount` again before `docker compose up`
-(that passphrase is the at-rest protection).
+`make luks-init` does the above and creates `$DATA_DIR/{postgres,n8n}` (chowning
+the n8n dir to uid 1000, which the n8n container runs as). The hardened overlay
+binds the data volumes to `$DATA_DIR`.
+
+**Two traps to avoid (both silently leave data unencrypted):**
+- **Set `DATA_DIR` + mount LUKS BEFORE the first `make harden-up`.** A Docker named
+  volume caches its device path on first creation; pointing `DATA_DIR` somewhere new
+  later does nothing until you `make harden-reset` (destroys the volumes so they
+  rebind). `make harden-up` hard-aborts if `DATA_DIR` isn't a live mountpoint.
+- **Reboot ordering.** Services use `restart: unless-stopped`, so the Docker daemon
+  may start them before you unlock LUKS. After a reboot run `make luks-open` first,
+  then `make harden-up`. For a fully automatic boot, add a systemd `.mount` unit (or
+  `/etc/crypttab` + `/etc/fstab`) ordered `Before=docker.service` so `$DATA_DIR` is
+  unlocked and mounted before Docker touches the bind paths.
 
 ## 5. n8n encryption key as a secret file
 

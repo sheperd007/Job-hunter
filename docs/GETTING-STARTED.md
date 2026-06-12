@@ -30,10 +30,11 @@ hardened), finish setup in n8n, and the commands you'll use day to day.
    enforces $8/key in code regardless.)
 
 ### 1.2 Notion
-1. <https://www.notion.so/my-integrations> → **New integration** → **Internal** →
-   **Save** → copy the **Internal Integration Secret** → `NOTION_TOKEN`.
-2. Open your **Career Hub** page → top-right **···** → **Connections** →
-   **Connect to** → select your integration. (Grants access to the Applications DB.)
+1. <https://www.notion.so/my-integrations> → **New integration** → type **Internal**
+   → **Save** → copy the integration secret → `NOTION_TOKEN`.
+   (New tokens start with `ntn_`; older ones with `secret_` — both work.)
+2. Open your **Career Hub** page → top-right **···** → **Add connections** →
+   select your integration. (Grants access to the Applications DB.)
 3. Nothing else — `NOTION_APPLICATIONS_DB` is already set and the 4 extra
    properties (Match score, Visa support, Source, Discovered) already exist.
 
@@ -47,9 +48,20 @@ hardened), finish setup in n8n, and the commands you'll use day to day.
 
 ### 1.4 Google (Gmail + Calendar)
 This one is set up **inside n8n** (the client id/secret are not `.env` values).
+The Cloud Console menu was renamed — "OAuth consent screen" is now **Google Auth
+Platform**.
 1. <https://console.cloud.google.com> → create a project.
 2. **APIs & Services → Library** → enable **Gmail API** + **Google Calendar API**.
-3. **OAuth consent screen** → External → add your Gmail as a **Test user**.
+3. **Google Auth Platform** (formerly OAuth consent screen):
+   - **Branding** → set app name + your support email.
+   - **Audience** → User type **External** → under **Test users** add your Gmail
+     (required: in Testing mode only listed test users can complete the flow).
+   - **Data Access → Add or Remove Scopes** → add the **Gmail** scope
+     (`.../auth/gmail.modify`) and the **Google Calendar** scope
+     (`.../auth/calendar`) → **Update → Save**. *(These are sensitive scopes; in
+     Testing mode you'll see an "unverified app" warning at sign-in — fine for a
+     test user.)* **Skipping this step is the #1 reason the Gmail/Calendar nodes
+     fail later** — without the scopes the consent never grants access.
 4. **Credentials → Create credentials → OAuth client ID → Web application**:
    - Authorized redirect URI: `http://localhost:5678/rest/oauth2-credential/callback`
      (or `https://<domain>/rest/oauth2-credential/callback` with the proxy).
@@ -71,20 +83,24 @@ cp .env.example .env
 nano .env          # fill OPENAI_KEY_A/B, NOTION_TOKEN, TELEGRAM_*, ADZUNA_*, OWNER_EMAIL, passwords
 ```
 
-### Hardened mode (shared host) — use `./secrets/*` files
-Keep `.env` **secret-free**; put secrets in files instead (see
-[`secrets/README.md`](../secrets/README.md)):
+### Hardened mode (shared host) — secret-free `.env` + `./secrets/*` files
+Use the **secret-free** template so no secret is ever injected into the container
+environment (env always outranks the secret files, so a secret left in `.env`
+would both leak in `docker inspect` and silently override the file):
+```bash
+cp .env.hardened.example .env      # NON-secret config only; edit ADZUNA_APP_ID, TELEGRAM_CHAT_ID, DATA_DIR
+```
+Then put the real secrets in files (see [`secrets/README.md`](../secrets/README.md)):
 ```bash
 umask 077
-printf '%s' 'sk-...A...'           > secrets/openai_key_a
-printf '%s' 'sk-...B...'           > secrets/openai_key_b
-printf '%s' 'secret_...'           > secrets/notion_token
-printf '%s' '...adzuna_app_key...' > secrets/adzuna_app_key
-printf '%s' 'a-strong-db-pass'     > secrets/db_password
-openssl rand -hex 24               > secrets/n8n_encryption_key
-printf '%s' 'n8n-ui-password'      > secrets/n8n_basic_auth_password
+printf '%s' 'sk-...A...'              > secrets/openai_key_a
+printf '%s' 'sk-...B...'              > secrets/openai_key_b
+printf '%s' 'ntn_...'                 > secrets/notion_token
+printf '%s' '...adzuna_app_key...'    > secrets/adzuna_app_key
+printf '%s' 'a-strong-db-pass'        > secrets/db_password
+printf '%s' "$(openssl rand -hex 24)" > secrets/n8n_encryption_key
+printf '%s' 'n8n-ui-password'         > secrets/n8n_basic_auth_password
 chmod 600 secrets/*
-# ADZUNA_APP_ID, OWNER_EMAIL, GOOGLE_CALENDAR_ID, TZ stay in .env (not secret)
 ```
 
 ---
@@ -97,20 +113,41 @@ docker compose up -d --build
 curl -s http://localhost:8000/health        # {"status":"ok","dry_run":true}
 ```
 
-### 3b. Hardened (firewall → optional LUKS → secrets → up)
+### 3b. Hardened (firewall → LUKS first → up)
+
+**Order matters:** set `DATA_DIR` in `.env` and mount LUKS *before* the first
+`make harden-up` — a Docker named volume caches its device path on first creation,
+so re-pointing it later needs `make harden-reset` (which destroys the volumes).
+
 ```bash
 make firewall                                # inbound = SSH only
-# optional: encrypt data at rest
+
+# 1. choose the encrypted location (ABSOLUTE path) in .env BEFORE launching:
+#    .env already has DATA_DIR=/mnt/agentdata from .env.hardened.example — adjust if needed.
+
+# 2. create + mount the LUKS volume there (one time, asks a passphrase):
 sudo apt install -y cryptsetup
-DATA_DIR=/mnt/agentdata make luks-init       # one time (asks a passphrase)
-echo 'DATA_DIR=/mnt/agentdata' >> .env
-# launch with secrets-as-files + container hardening (one command):
-DATA_DIR=/mnt/agentdata make harden-up
+make luks-init                               # uses DATA_DIR from .env
+
+# 3. launch (Makefile refuses to start if DATA_DIR isn't a live mount):
+make harden-up
 curl -s http://localhost:8000/health
-# encrypt the secret files at rest, then remove the age key from the box:
+
+# 4. encrypt the secret files at rest, then remove the age key from the box:
 AGE_RECIPIENT=age1... make secrets-encrypt
 ```
-After a **reboot**: `DATA_DIR=/mnt/agentdata make luks-open && DATA_DIR=/mnt/agentdata make harden-up`.
+
+After a **reboot** (unlock LUKS first, then start):
+```bash
+make luks-open && make harden-up
+```
+
+> Two reboot cautions: (1) services use `restart: unless-stopped`, so Docker may
+> try to start them before you run `luks-open` — keep `make harden-up` as the
+> thing that (re)creates them after the mount, or wire a systemd `.mount`/crypttab
+> unit ordered before `docker.service` (see [`docs/SECURITY.md`](SECURITY.md)).
+> (2) If you ever change `DATA_DIR`, run `make harden-reset` (destroys volumes) so
+> they rebind to the new path — otherwise data stays on the old location.
 
 > Full hardening rationale + the root-co-tenant caveat: [`docs/SECURITY.md`](SECURITY.md).
 

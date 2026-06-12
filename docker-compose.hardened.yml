@@ -1,11 +1,18 @@
-# Hardening overlay. Use WITH the base file:
-#   docker compose -f docker-compose.yml -f docker-compose.hardened.yml up -d
+# Hardening overlay. Bring the stack up with:
+#   make harden-up        (recommended — creates data dirs + checks the LUKS mount)
+# or, equivalently:
+#   DATA_DIR=/abs/path mkdir -p $DATA_DIR/postgres $DATA_DIR/n8n \
+#     && docker compose -f docker-compose.yml -f docker-compose.hardened.yml up -d
 #
 # What it changes:
 #  - Secrets come from files in ./secrets/* (mounted at /run/secrets), NOT env.
-#    They no longer appear in `docker inspect` or /proc/<pid>/environ.
-#  - Postgres + n8n read their passwords / n8n encryption key from *_FILE.
+#    Use a SECRET-FREE .env in this mode (cp .env.hardened.example .env) so no
+#    secret is injected via env_file and so the worker's pydantic secrets_dir
+#    (env always outranks secret files) is actually used.
+#  - Plaintext password keys inherited from the base file are blanked here so
+#    Postgres/n8n use the *_FILE values and nothing leaks into `docker inspect`.
 #  - no-new-privileges on all; worker runs cap-dropped + read-only rootfs.
+#  - Data volumes bind to ${DATA_DIR} (point it at a LUKS mount — ABSOLUTE path).
 #
 # NOTE: none of this protects you from a user with ROOT / docker-group access on
 # the host — they can still read container memory and the docker socket. For that
@@ -23,17 +30,21 @@ secrets:
 services:
   postgres:
     environment:
+      POSTGRES_PASSWORD: ""        # blank the base value; postgres treats empty as unset and uses _FILE
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
     secrets: [db_password]
     security_opt: ["no-new-privileges:true"]
 
   worker:
-    # Force build-from-parts so the password comes from the secret file, not a DSN in env.
+    # Build the DSN from parts so the DB password comes from the secret file.
+    # HOME/PYTHONDONTWRITEBYTECODE keep a read-only rootfs happy.
     environment:
       DATABASE_URL: ""
       DB_HOST: postgres
       DB_USER: ${POSTGRES_USER:-n8n}
       DB_NAME: ${POSTGRES_DB:-n8n}
+      HOME: /tmp
+      PYTHONDONTWRITEBYTECODE: "1"
     secrets:
       - db_password
       - openai_key_a
@@ -48,8 +59,10 @@ services:
 
   n8n:
     environment:
+      DB_POSTGRESDB_PASSWORD: ""   # blank the base plaintext; the _FILE value wins
       DB_POSTGRESDB_PASSWORD_FILE: /run/secrets/db_password
       N8N_ENCRYPTION_KEY_FILE: /run/secrets/n8n_encryption_key
+      N8N_BASIC_AUTH_PASSWORD: ""  # blank any .env value; the _FILE value wins
       N8N_BASIC_AUTH_PASSWORD_FILE: /run/secrets/n8n_basic_auth_password
     secrets:
       - db_password
@@ -57,9 +70,12 @@ services:
       - n8n_basic_auth_password
     security_opt: ["no-new-privileges:true"]
 
-# Pin the data volumes to ${DATA_DIR} (point it at a LUKS mount for encryption at
-# rest). Defaults to ./data so it also works without LUKS. `make harden-up`
-# creates the subdirs; `make luks-open` mounts the encrypted volume first.
+# Data volumes bind to ${DATA_DIR} (set it to an ABSOLUTE path; a LUKS mount for
+# encryption at rest). `make harden-up` creates the subdirs and refuses to start
+# on an unmounted LUKS path. IMPORTANT: a named volume caches its device binding
+# on first creation — if you change DATA_DIR later you must `make harden-reset`
+# (destroys the volumes) so they rebind. So set DATA_DIR / run luks-open BEFORE
+# the first harden-up.
 volumes:
   postgres-data:
     driver: local

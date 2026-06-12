@@ -177,7 +177,7 @@ make restore DUMP=backups/db-<stamp>.sql && make up
 
 ```bash
 py -m venv .venv && .venv/Scripts/python -m pip install -r worker/requirements.txt
-python -m pytest -q        # 60 tests
+python -m pytest -q        # 63 tests
 ```
 
 Worker endpoints: `/health` `/budget/status` `/llm/complete` `/jobs/run`

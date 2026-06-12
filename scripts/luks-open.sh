@@ -8,6 +8,6 @@ MAP="agentdata"
 
 [ -e "/dev/mapper/$MAP" ] || sudo cryptsetup open "$IMG" "$MAP"
 mountpoint -q "$DATA_DIR" || { sudo mkdir -p "$DATA_DIR"; sudo mount "/dev/mapper/$MAP" "$DATA_DIR"; }
-sudo chown -R "$USER" "$DATA_DIR"
 mkdir -p "$DATA_DIR/postgres" "$DATA_DIR/n8n"
+sudo chown -R 1000:1000 "$DATA_DIR/n8n"   # n8n container runs as uid 1000 (node)
 mountpoint -q "$DATA_DIR" && echo "Mounted $DATA_DIR — safe to run 'make harden-up'."

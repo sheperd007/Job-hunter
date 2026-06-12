@@ -21,5 +21,6 @@ sudo mkdir -p "$DATA_DIR"
 mountpoint -q "$DATA_DIR" || sudo mount "/dev/mapper/$MAP" "$DATA_DIR"
 sudo chown -R "$USER" "$DATA_DIR"
 mkdir -p "$DATA_DIR/postgres" "$DATA_DIR/n8n"
-echo "LUKS volume ready at $DATA_DIR. Set DATA_DIR=$DATA_DIR in your shell/.env."
+sudo chown -R 1000:1000 "$DATA_DIR/n8n"   # n8n container runs as uid 1000 (node)
+echo "LUKS volume ready at $DATA_DIR. Set DATA_DIR=$DATA_DIR in .env BEFORE the first 'make harden-up'."
 echo "After a reboot, run 'make luks-open' before 'make harden-up'."

@@ -1,8 +1,15 @@
-DATA_DIR ?= ./data
+# DATA_DIR is read from .env so the value is authoritative and consistent across
+# `harden-*` recipes and `docker compose` (which also reads .env). Override on the
+# CLI with `make harden-up DATA_DIR=/abs/path` if you prefer.
+DATA_DIR := $(shell sh -c "grep -E '^DATA_DIR=' .env 2>/dev/null | tail -1 | cut -d= -f2-")
+ifeq ($(strip $(DATA_DIR)),)
+DATA_DIR := ./data
+endif
+export DATA_DIR
 HARDENED := -f docker-compose.yml -f docker-compose.hardened.yml
 
 .PHONY: up down logs test backup restore proxy-up \
-        harden-up harden-down harden-logs secrets-encrypt secrets-decrypt \
+        harden-up harden-down harden-logs harden-reset secrets-encrypt secrets-decrypt \
         firewall luks-init luks-open
 
 # --- standard (single-user host) ---
@@ -15,19 +22,24 @@ backup:    ; bash scripts/backup.sh
 restore:   ; bash scripts/restore.sh $(DUMP)
 
 # --- hardened (shared / multi-user host) ---
-# Creates the data dirs (on the LUKS mount if DATA_DIR points there) then brings
-# the stack up with secrets-as-files + container hardening. One command.
+# Refuses to start if DATA_DIR is a LUKS path that is not currently mounted
+# (else data would silently land unencrypted). Override with ALLOW_PLAINTEXT=1.
 harden-up:
-	@mkdir -p "$(DATA_DIR)/postgres" "$(DATA_DIR)/n8n"
-	@mountpoint -q "$(DATA_DIR)" 2>/dev/null \
-	  && echo "[ok] $(DATA_DIR) is an encrypted mount" \
-	  || echo "[warn] $(DATA_DIR) is NOT a mountpoint — data will sit on the plain disk (run 'make luks-open')"
-	DATA_DIR="$(DATA_DIR)" docker compose $(HARDENED) up -d --build
+	@D="$(DATA_DIR)"; \
+	if [ "$$D" != "./data" ] && ! mountpoint -q "$$D" 2>/dev/null; then \
+	  if [ "$$ALLOW_PLAINTEXT" = "1" ]; then echo "[warn] $$D not mounted; ALLOW_PLAINTEXT=1 -> writing to plain disk"; \
+	  else echo "[fatal] $$D is not a mountpoint. Run 'make luks-open' first, or pass ALLOW_PLAINTEXT=1."; exit 1; fi; \
+	fi; \
+	mkdir -p "$$D/postgres" "$$D/n8n"
+	docker compose $(HARDENED) up -d --build
 
 harden-down:     ; docker compose $(HARDENED) down
 harden-logs:     ; docker compose $(HARDENED) logs -f --tail=100
+# DESTROYS the data volumes (use after changing DATA_DIR so the bind rebinds).
+harden-reset:    ; docker compose $(HARDENED) down -v
+
 secrets-encrypt: ; bash scripts/secrets-encrypt.sh
 secrets-decrypt: ; bash scripts/secrets-decrypt.sh
 firewall:        ; bash scripts/firewall.sh
-luks-init:       ; DATA_DIR="$(DATA_DIR)" bash scripts/luks-setup.sh
-luks-open:       ; DATA_DIR="$(DATA_DIR)" bash scripts/luks-open.sh
+luks-init:       ; bash scripts/luks-setup.sh
+luks-open:       ; bash scripts/luks-open.sh
