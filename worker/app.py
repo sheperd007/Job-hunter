@@ -8,6 +8,8 @@ from worker.dedupe import PostgresSeenStore
 from worker.notion import create_page
 from worker.pipeline import run_discovery, gather_jobs
 from worker.profile_build import build_profile
+from worker.triage import triage_email
+from worker.calendar_parse import parse_event
 
 app = FastAPI(title="job-agent-worker")
 settings = Settings()
@@ -104,3 +106,15 @@ async def profile_build_ep(req: ProfileReq):
     if data and not settings.dry_run:
         _save_profile(data)
     return {"saved": bool(data) and not settings.dry_run, "profile": data}
+
+
+@app.post("/triage")
+async def triage_ep(email: dict):
+    """W1: classify a Gmail message + draft a reply (draft-only; n8n saves it)."""
+    return await triage_email(email, _gateway())
+
+
+@app.post("/calendar/parse")
+async def calendar_ep(email: dict):
+    """W2: detect a meeting/interview request + propose an event (no auto-create)."""
+    return await parse_event(email, _gateway())
