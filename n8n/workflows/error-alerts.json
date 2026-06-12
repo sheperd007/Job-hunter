@@ -1,0 +1,34 @@
+{
+  "name": "Error Alerts",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "err-trigger",
+      "name": "On workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": { "__rl": true, "value": "={{ $env.TELEGRAM_CHAT_ID }}", "mode": "expression" },
+        "text": "={{ '⚠️ Job Agent workflow failed: ' + $json.workflow.name + '\\n' + ($json.execution.error.message || 'unknown error') }}",
+        "additionalFields": {}
+      },
+      "id": "tg-alert",
+      "name": "Telegram alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [480, 300],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "On workflow error": {
+      "main": [ [ { "node": "Telegram alert", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}

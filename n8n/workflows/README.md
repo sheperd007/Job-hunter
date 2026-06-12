@@ -7,7 +7,14 @@ Import in the n8n UI: **Workflows → ⋯ → Import from File**, pick a JSON he
 | `W3-job-discovery.json` | Daily 06:00 cron → `POST {{WORKER_URL}}/jobs/run`. The worker pulls sources, dedupes, applies the visa filter, scores vs your profile, and inserts matches into Notion. | Phase 2 ✅ |
 | `W1-email-triage.json` | Every 30 min → Gmail get unread → `worker /triage` → if needs reply, **save a Gmail draft** (never sends). | Phase 3 ✅ |
 | `W2-calendar-assist.json` | Hourly → Gmail get unread → `worker /calendar/parse` → if a meeting/interview is detected, surface a proposal (event creation is gated behind W4 approval). | Phase 3 ✅ |
-| W4 (digest + approvals) | daily digest email + Telegram approve/reject buttons | Phase 4 (todo) |
+| `W4-daily-digest.json` | Daily 08:00 → `worker /digest` → emails you the day's new matches + LLM spend, and sends the same to Telegram. | Phase 4 ✅ |
+| `error-alerts.json` | Error Trigger on any workflow failure → Telegram alert. Set this as the **Error Workflow** in each workflow's Settings. | Phase 4 ✅ |
+
+W4 needs env `OWNER_EMAIL` + `TELEGRAM_CHAT_ID`, and a **Telegram** credential (bot token) on the Telegram nodes.
+
+> Approvals are intentionally lightweight: email is **draft-only** (open the Gmail
+> draft and hit send), jobs land in Notion (no action needed), and calendar events
+> are surfaced as proposals. One-tap Telegram approve/reject is a future enhancement.
 
 ## Credentials (set in the n8n UI after import)
 

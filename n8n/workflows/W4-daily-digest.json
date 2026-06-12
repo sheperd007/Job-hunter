@@ -1,0 +1,73 @@
+{
+  "name": "W4 - Daily Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "cronExpression", "expression": "0 8 * * *" } ] }
+      },
+      "id": "sched-w4",
+      "name": "Daily 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.WORKER_URL }}/digest",
+        "options": { "timeout": 120000 }
+      },
+      "id": "http-digest",
+      "name": "worker /digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [440, 300],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "gmail-send",
+      "name": "Email digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [680, 220],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": { "__rl": true, "value": "={{ $env.TELEGRAM_CHAT_ID }}", "mode": "expression" },
+        "text": "={{ $json.telegram }}",
+        "additionalFields": {}
+      },
+      "id": "tg-send",
+      "name": "Telegram digest",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [680, 400],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Daily 08:00": { "main": [ [ { "node": "worker /digest", "type": "main", "index": 0 } ] ] },
+    "worker /digest": {
+      "main": [
+        [
+          { "node": "Email digest", "type": "main", "index": 0 },
+          { "node": "Telegram digest", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}
