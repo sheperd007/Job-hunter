@@ -1,0 +1,6 @@
+{$DOMAIN} {
+	basic_auth {
+		{$N8N_BASIC_AUTH_USER} {$N8N_BASIC_AUTH_PASSWORD_HASH}
+	}
+	reverse_proxy n8n:5678
+}
