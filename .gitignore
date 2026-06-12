@@ -12,6 +12,7 @@ resume*
 postgres-data/
 n8n-data/
 caddy-data/
+backups/
 *.log
 
 # Python
