@@ -1,0 +1,141 @@
+{
+  "name": "W5 - Telegram Approvals",
+  "nodes": [
+    {
+      "parameters": { "updates": ["callback_query"] },
+      "id": "tg-trigger",
+      "name": "On button tap",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "decision", "value": "={{ $json.callback_query.data.startsWith('a:') ? 'approve' : 'reject' }}", "type": "string" },
+            { "id": "a2", "name": "actionId", "value": "={{ $json.callback_query.data.split(':')[1] }}", "type": "string" },
+            { "id": "a3", "name": "callbackQueryId", "value": "={{ $json.callback_query.id }}", "type": "string" }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_URL }}/pending/{{ $json.actionId }}/resolve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"decision\": $json.decision } }}",
+        "options": {}
+      },
+      "id": "resolve",
+      "name": "Resolve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [640, 300],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            { "leftValue": "={{ $json.already }}", "rightValue": false, "operator": { "type": "boolean", "operation": "false", "singleValue": true } },
+            { "leftValue": "={{ $json.status }}", "rightValue": "approved", "operator": { "type": "string", "operation": "equals" } }
+          ]
+        }
+      },
+      "id": "act",
+      "name": "Act now?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.kind }}", "rightValue": "reply", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "reply" },
+            { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.kind }}", "rightValue": "event", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "event" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route",
+      "name": "reply or event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $('Resolve').item.json.payload.to }}",
+        "subject": "={{ $('Resolve').item.json.payload.subject }}",
+        "emailType": "text",
+        "message": "={{ $('Resolve').item.json.payload.body }}",
+        "options": {}
+      },
+      "id": "send-reply",
+      "name": "Send reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1320, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "delete",
+        "messageId": "={{ $('Resolve').item.json.payload.draftId }}"
+      },
+      "id": "del-draft",
+      "name": "Delete draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1540, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": { "__rl": true, "value": "={{ $env.GOOGLE_CALENDAR_ID }}", "mode": "id" },
+        "start": "={{ $('Resolve').item.json.payload.start }}",
+        "end": "={{ $('Resolve').item.json.payload.end }}",
+        "additionalFields": {
+          "summary": "={{ $('Resolve').item.json.payload.title }}",
+          "location": "={{ $('Resolve').item.json.payload.location }}",
+          "description": "={{ $('Resolve').item.json.payload.notes }}"
+        }
+      },
+      "id": "create-event",
+      "name": "Create event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [1320, 400],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "On button tap": { "main": [ [ { "node": "Parse", "type": "main", "index": 0 } ] ] },
+    "Parse": { "main": [ [ { "node": "Resolve", "type": "main", "index": 0 } ] ] },
+    "Resolve": { "main": [ [ { "node": "Act now?", "type": "main", "index": 0 } ] ] },
+    "Act now?": { "main": [ [ { "node": "reply or event", "type": "main", "index": 0 } ], [] ] },
+    "reply or event": { "main": [ [ { "node": "Send reply", "type": "main", "index": 0 } ], [ { "node": "Create event", "type": "main", "index": 0 } ] ] },
+    "Send reply": { "main": [ [ { "node": "Delete draft", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

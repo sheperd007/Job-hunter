@@ -2,14 +2,12 @@
   "name": "W1 - Email Triage",
   "nodes": [
     {
-      "parameters": {
-        "rule": { "interval": [ { "field": "cronExpression", "expression": "*/30 * * * *" } ] }
-      },
+      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "*/30 * * * *" } ] } },
       "id": "sched-w1",
       "name": "Every 30 min",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
-      "position": [220, 300]
+      "position": [200, 300]
     },
     {
       "parameters": {
@@ -24,7 +22,7 @@
       "name": "Get unread",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
-      "position": [440, 300]
+      "position": [400, 300]
     },
     {
       "parameters": {
@@ -39,7 +37,7 @@
       "name": "worker /triage",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [660, 300],
+      "position": [600, 300],
       "retryOnFail": true,
       "maxTries": 2,
       "onError": "continueRegularOutput"
@@ -49,20 +47,14 @@
         "conditions": {
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
           "combinator": "and",
-          "conditions": [
-            {
-              "leftValue": "={{ $json.needs_reply }}",
-              "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
-            }
-          ]
+          "conditions": [ { "leftValue": "={{ $json.needs_reply }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ]
         }
       },
       "id": "if-reply",
       "name": "Needs reply?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [880, 300]
+      "position": [800, 300]
     },
     {
       "parameters": {
@@ -77,14 +69,56 @@
       "name": "Create Gmail draft",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
-      "position": [1120, 220]
+      "position": [1000, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_URL }}/pending",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"kind\": \"reply\", \"payload\": { \"to\": $('Get unread').item.json.from, \"subject\": 'Re: ' + $('Get unread').item.json.subject, \"body\": $('worker /triage').item.json.draft, \"draftId\": $json.id } } }}",
+        "options": {}
+      },
+      "id": "store-pending",
+      "name": "Store pending",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1200, 220],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": { "__rl": true, "value": "={{ $env.TELEGRAM_CHAT_ID }}", "mode": "expression" },
+        "text": "={{ '📧 Draft reply ready\\nTo: ' + $('Get unread').item.json.from + '\\nSubject: ' + $('Get unread').item.json.subject + '\\n\\n' + $('worker /triage').item.json.draft }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            { "row": { "buttons": [
+              { "text": "✅ Send", "additionalFields": { "callbackData": "=a:{{ $json.id }}" } },
+              { "text": "❌ Discard", "additionalFields": { "callbackData": "=r:{{ $json.id }}" } }
+            ] } }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "ask-approval",
+      "name": "Ask approval",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1400, 220],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
     "Every 30 min": { "main": [ [ { "node": "Get unread", "type": "main", "index": 0 } ] ] },
     "Get unread": { "main": [ [ { "node": "worker /triage", "type": "main", "index": 0 } ] ] },
     "worker /triage": { "main": [ [ { "node": "Needs reply?", "type": "main", "index": 0 } ] ] },
-    "Needs reply?": { "main": [ [ { "node": "Create Gmail draft", "type": "main", "index": 0 } ], [] ] }
+    "Needs reply?": { "main": [ [ { "node": "Create Gmail draft", "type": "main", "index": 0 } ], [] ] },
+    "Create Gmail draft": { "main": [ [ { "node": "Store pending", "type": "main", "index": 0 } ] ] },
+    "Store pending": { "main": [ [ { "node": "Ask approval", "type": "main", "index": 0 } ] ] }
   },
   "settings": { "executionOrder": "v1" }
 }
