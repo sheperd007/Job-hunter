@@ -11,6 +11,7 @@ from worker.profile_build import build_profile
 from worker.triage import triage_email
 from worker.calendar_parse import parse_event
 from worker.digest import build_digest
+from worker.pending import PostgresPendingStore
 
 app = FastAPI(title="job-agent-worker")
 settings = Settings()
@@ -141,3 +142,26 @@ def digest_ep():
     date = _today()
     budget = {k: v.month_usd for k, v in _ledger().month_spend(_month()).items()}
     return build_digest(jobs=_recent_jobs(date), budget=budget, date=date)
+
+
+class PendingReq(BaseModel):
+    kind: str        # 'reply' | 'event'
+    payload: dict
+
+
+@app.post("/pending")
+def pending_add(req: PendingReq):
+    """Store a proposed action awaiting one-tap Telegram approval."""
+    store = PostgresPendingStore(settings.database_url)
+    return {"id": store.add(req.kind, req.payload)}
+
+
+class ResolveReq(BaseModel):
+    decision: str    # 'approve' | 'reject'
+
+
+@app.post("/pending/{action_id}/resolve")
+def pending_resolve(action_id: str, req: ResolveReq):
+    """Idempotently resolve a pending action. already=False means act now."""
+    store = PostgresPendingStore(settings.database_url)
+    return store.resolve(action_id, req.decision)

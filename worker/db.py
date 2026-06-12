@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS profile (
     updated TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT singleton CHECK (id = 1)
 );
+
+CREATE TABLE IF NOT EXISTS pending_actions (
+    id BIGSERIAL PRIMARY KEY,
+    kind TEXT NOT NULL,                        -- 'reply' | 'event'
+    payload JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',    -- pending | approved | rejected
+    created TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved TIMESTAMPTZ
+);
 """
 
 
