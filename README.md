@@ -16,6 +16,12 @@ Self-hosted Docker stack that triages Gmail (draft-only), assists Google Calenda
 | `postgres` | n8n DB + `usage_ledger`, `seen_jobs`, `profile`. |
 | `caddy` | Optional reverse proxy + HTTPS + basic-auth (compose profile `proxy`). |
 
+## Deploy targets
+
+- **DigitalOcean App Platform** (app-from-repo, no server admin) — see [`docs/DEPLOY-DO.md`](docs/DEPLOY-DO.md). Runs outside Iran → OpenAI/Google/job-boards reachable.
+- **Any Linux + Docker host** (Hetzner / your Ubuntu server / local) — the compose path below.
+- ⚠️ Do **not** host on Iranian infra (e.g. ArvanCloud): the outbound Iranian IP is geoblocked by OpenAI and Google, which breaks the brain + Gmail/Calendar.
+
 ## Quickstart (on the Ubuntu server)
 
 ```bash
