@@ -5,9 +5,14 @@ Import in the n8n UI: **Workflows → ⋯ → Import from File**, pick a JSON he
 | File | What it does | Status |
 |---|---|---|
 | `W3-job-discovery.json` | Daily 06:00 cron → `POST {{WORKER_URL}}/jobs/run`. The worker pulls sources, dedupes, applies the visa filter, scores vs your profile, and inserts matches into Notion. | Phase 2 ✅ |
-| W1 (email triage) | every 30 min → Gmail fetch → `worker /triage` → save Gmail draft | Phase 3 (todo) |
-| W2 (calendar) | meeting/interview detection → propose event → approve → create | Phase 3 (todo) |
+| `W1-email-triage.json` | Every 30 min → Gmail get unread → `worker /triage` → if needs reply, **save a Gmail draft** (never sends). | Phase 3 ✅ |
+| `W2-calendar-assist.json` | Hourly → Gmail get unread → `worker /calendar/parse` → if a meeting/interview is detected, surface a proposal (event creation is gated behind W4 approval). | Phase 3 ✅ |
 | W4 (digest + approvals) | daily digest email + Telegram approve/reject buttons | Phase 4 (todo) |
+
+## Credentials (set in the n8n UI after import)
+
+W1/W2 need a **Gmail OAuth2** credential — open each Gmail node and select/create it.
+Imported workflows don't carry credentials; n8n will prompt you to pick one.
 
 ## Requirements
 

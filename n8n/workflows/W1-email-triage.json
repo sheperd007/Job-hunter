@@ -1,0 +1,90 @@
+{
+  "name": "W1 - Email Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "cronExpression", "expression": "*/30 * * * *" } ] }
+      },
+      "id": "sched-w1",
+      "name": "Every 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 25,
+        "simple": true,
+        "filters": { "q": "is:unread newer_than:2d" }
+      },
+      "id": "gmail-get",
+      "name": "Get unread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_URL }}/triage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"from\": $json.from, \"subject\": $json.subject, \"body\": $json.text } }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "http-triage",
+      "name": "worker /triage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [660, 300],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.needs_reply }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        }
+      },
+      "id": "if-reply",
+      "name": "Needs reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "={{ 'Re: ' + $('Get unread').item.json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.draft }}",
+        "options": { "sendTo": "={{ $('Get unread').item.json.from }}" }
+      },
+      "id": "gmail-draft",
+      "name": "Create Gmail draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1120, 220]
+    }
+  ],
+  "connections": {
+    "Every 30 min": { "main": [ [ { "node": "Get unread", "type": "main", "index": 0 } ] ] },
+    "Get unread": { "main": [ [ { "node": "worker /triage", "type": "main", "index": 0 } ] ] },
+    "worker /triage": { "main": [ [ { "node": "Needs reply?", "type": "main", "index": 0 } ] ] },
+    "Needs reply?": { "main": [ [ { "node": "Create Gmail draft", "type": "main", "index": 0 } ], [] ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
