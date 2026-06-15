@@ -37,7 +37,7 @@ async def test_complete_records_usage():
 @pytest.mark.asyncio
 async def test_complete_blocks_when_both_keys_capped():
     # Both keys over the safety margin -> no fallback possible -> block.
-    gw, _ = make_gw(spend_a=7.6, spend_b=7.6)
+    gw, _ = make_gw(spend_a=9.6, spend_b=9.6)
     with pytest.raises(RuntimeError, match="budget"):
         await gw.complete("triage", [{"role": "user", "content": "x"}])
 

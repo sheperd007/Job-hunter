@@ -89,7 +89,7 @@ async def load_register(settings, *, fetch=None) -> SponsorRegister | None:
 async def gather_jobs(settings, queries: list[str] | None = None) -> list:
     """Runtime: pull from each configured source. One source failing never fails
     the whole run."""
-    from worker.sources import adzuna, arbeitnow
+    from worker.sources import adzuna, arbeitnow, scrapingdog_indeed
     from worker.sources.rss import fetch_rss
 
     queries = queries or ["machine learning", "deep learning", "data scientist",
@@ -108,6 +108,13 @@ async def gather_jobs(settings, queries: list[str] | None = None) -> list:
                                      app_key=settings.adzuna_app_key,
                                      country=country, what=q))
     await _safe(arbeitnow.fetch())
+    # Indeed via Scrapingdog (no official Indeed API). Only runs when a key is set.
+    # Medium credit guard: 3 queries x 5 countries = 15 requests/run (~15 credits).
+    if settings.scrapingdog_key:
+        for country in ("gb", "de", "nl", "ca", "au"):
+            for q in queries[:3]:
+                await _safe(scrapingdog_indeed.fetch(
+                    api_key=settings.scrapingdog_key, country=country, what=q))
     # Academic RSS feeds (no key needed)
     for url, src in [
         ("https://www.jobs.ac.uk/feeds/jobs", "jobs.ac.uk"),

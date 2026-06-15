@@ -24,9 +24,9 @@ class Settings(BaseSettings):
     model_match: str = "gpt-4.1"
     model_fallback: str = "gpt-4o-mini"
 
-    monthly_cap_usd: float = 8.0
-    cap_safety_margin_usd: float = 7.5     # block key once month spend >= this
-    daily_soft_cap_usd: float = 0.27       # ~ 8/30, advisory
+    monthly_cap_usd: float = 10.0
+    cap_safety_margin_usd: float = 9.5     # block key once month spend >= this
+    daily_soft_cap_usd: float = 0.33       # ~ 10/30, advisory
 
     # DB: set DATABASE_URL directly, or supply parts (db_password can be a secret
     # file) and let `dsn` build the connection string.
@@ -47,11 +47,12 @@ class Settings(BaseSettings):
     # Job source keys
     adzuna_app_id: str = ""
     adzuna_app_key: str = ""
+    scrapingdog_key: str = ""        # Indeed via Scrapingdog scraper API (1 credit/req)
 
     # Per-run cap on LLM match scoring (cost guard). ~189 in-region jobs/day reach
-    # scoring under the soft visa gate; capping keeps key B under the $8/mo cap.
+    # scoring under the soft visa gate; capping keeps key B under the $10/mo cap.
     # Uncapped runs are bounded only by the Budget Guard hard stop.
-    max_match_per_run: int = 40
+    max_match_per_run: int = 60
 
     # Optional licensed-sponsor register CSV (e.g. UK Home Office list). When set,
     # employers on the list are flagged "On sponsor register" (strongest visa

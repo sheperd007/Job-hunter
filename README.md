@@ -10,7 +10,7 @@ A self-hosted, Dockerized agent that helps you land a visa-sponsored job abroad:
 - **Calendar** — spots meeting/interview requests and offers one-tap
   **Add to calendar**.
 - **Daily digest** — emails + Telegrams the day's new matches and your LLM spend.
-- **Hard cost cap** — two OpenAI keys, **$8/month each, enforced in code**.
+- **Hard cost cap** — two OpenAI keys, **$10/month each, enforced in code**.
 
 > **Start here:** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) — step-by-step
 > credentials, launch, and commands. · Server commands: [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
@@ -59,12 +59,12 @@ exactly where to get it. Google OAuth is the only one that lives in the n8n UI
 
 ### 1. OpenAI — `OPENAI_KEY_A`, `OPENAI_KEY_B`
 
-The brain. **Two separate keys** so each can be capped at $8/month.
+The brain. **Two separate keys** so each can be capped at $10/month.
 
 1. Go to <https://platform.openai.com/api-keys> (sign in / add a payment method).
 2. **Create new secret key** twice → copy each into `OPENAI_KEY_A` and `OPENAI_KEY_B`.
 3. Recommended: under **Settings → Limits / Projects**, also set a hard monthly
-   budget per project as a backstop (the worker enforces $8 in code regardless).
+   budget per project as a backstop (the worker enforces $10 in code regardless).
 4. Leave `OPENAI_BASE_URL=https://api.openai.com/v1`. (Swap it for OpenRouter,
    Azure OpenAI, or a local Ollama endpoint if you ever want a different provider.)
 
@@ -121,7 +121,24 @@ For the daily digest + one-tap approvals.
    and **app_key**. Free tier is plenty.
    (Arbeitnow + EURAXESS + jobs.ac.uk need no key.)
 
-### 6. n8n / infra
+### 6. Scrapingdog — Indeed (optional) — `SCRAPINGDOG_KEY`
+
+Indeed has **no usable official job-search API** (the Publisher API is
+deprecated), so Indeed is pulled via [Scrapingdog](https://www.scrapingdog.com/)'s
+Indeed Scraper API (1 credit/request, parsed JSON).
+
+1. Sign up at <https://www.scrapingdog.com/> → copy the API key from the dashboard
+   into `SCRAPINGDOG_KEY`.
+2. **Leave it empty to skip Indeed entirely** — the source only runs when the key
+   is set. Each discovery run makes **~15 requests** (3 queries × 5 countries),
+   i.e. ~15 credits/run (~450/month). Tune the loop in
+   [`worker/pipeline.py`](worker/pipeline.py) (`gather_jobs`) to spend more/less.
+
+> Indeed postings carry no structured visa flag, so they pass the *soft* visa gate
+> and reach the LLM matcher — which spends OpenAI budget. The `MAX_MATCH_PER_RUN`
+> cap still bounds that cost.
+
+### 7. n8n / infra
 
 | Var | What |
 |---|---|
@@ -136,8 +153,8 @@ For the daily digest + one-tap approvals.
 ## Budget Guard
 
 Every LLM call goes through the worker's single `LLMGateway`. It logs each call's
-cost to `usage_ledger`, blocks a key once its month spend reaches **$7.50** (safety
-margin under $8), falls back to the other key / a cheaper model, and alerts when
+cost to `usage_ledger`, blocks a key once its month spend reaches **$9.50** (safety
+margin under $10), falls back to the other key / a cheaper model, and alerts when
 both are exhausted. Check it any time:
 
 ```bash
