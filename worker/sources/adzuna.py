@@ -2,7 +2,7 @@
 Docs: https://developer.adzuna.com/  (needs app_id + app_key)
 """
 from worker.models import Job
-from worker.normalize import canonical_url, detect_region
+from worker.normalize import detect_region
 from worker.sources.base import get_json
 
 _URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
@@ -29,7 +29,9 @@ async def fetch(*, app_id: str, app_key: str, country: str = "gb",
             title=(r.get("title") or "").strip(),
             org=(r.get("company") or {}).get("display_name", ""),
             location=loc,
-            url=canonical_url(url),
+            url=url,                       # keep the REAL redirect_url (its signed
+                                           # `se` token is required; canonicalizing
+                                           # is dedup-only, done in worker.dedupe)
             source="adzuna",
             description=r.get("description", ""),
             region=detect_region(loc),

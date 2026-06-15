@@ -3,7 +3,7 @@
 run_discovery() is the pure, injectable core (deps passed in -> unit-tested with
 fakes). gather_jobs() is the runtime glue that calls the real source clients.
 """
-from worker.dedupe import filter_new
+from worker.dedupe import filter_new, content_key_for
 from worker.normalize import in_target_region
 from worker.visa import assess, SponsorRegister
 from worker.sources.base import get_text
@@ -49,18 +49,19 @@ async def run_discovery(*, jobs, profile, gateway, store, notion_create,
             capped = True
             break
         scored += 1
+        ckey = content_key_for(job)
         if m.score < min_score:
             # A definitive negative against a stable profile — mark it seen (no
             # Notion page) so it is not re-scored, and re-paid for, every run. This
             # also stops the per-run cap being consumed by the same front-of-list
             # rejects daily, which would starve genuinely new jobs further down.
             store.mark(url=job.url, title=job.title, org=job.org,
-                       source=job.source, notion_page_url=None)
+                       source=job.source, notion_page_url=None, content_key=ckey)
             dropped["score"] += 1
             continue
         res = await notion_create(job, m, v, discovered=discovered)
         store.mark(url=job.url, title=job.title, org=job.org, source=job.source,
-                   notion_page_url=res.get("url"))
+                   notion_page_url=res.get("url"), content_key=ckey)
         inserted.append({"title": job.title, "url": job.url, "score": m.score,
                          "visa": v.label, "notion": res.get("url")})
 

@@ -3,7 +3,7 @@ valuable for the visa filter. EU/Germany heavy.
 Docs: https://www.arbeitnow.com/api
 """
 from worker.models import Job
-from worker.normalize import canonical_url, detect_region
+from worker.normalize import detect_region
 from worker.sources.base import get_json
 
 _URL = "https://www.arbeitnow.com/api/job-board-api"
@@ -22,7 +22,7 @@ async def fetch(*, page: int = 1) -> list[Job]:
             title=r.get("title", ""),
             org=r.get("company_name", ""),
             location=loc,
-            url=canonical_url(url),
+            url=url,                       # real URL; canonicalization is dedup-only
             source="arbeitnow",
             description=r.get("description", ""),
             region=detect_region("remote" if remote else loc),

@@ -1,9 +1,46 @@
-from worker.dedupe import InMemorySeenStore, filter_new
+from worker.dedupe import InMemorySeenStore, filter_new, content_key_for
 from worker.models import Job
 
 
 def j(url, title="t"):
     return Job(title=title, url=url, source="s")
+
+
+def _seed(store, job):
+    store.mark(url=job.url, title=job.title, org=job.org, source=job.source,
+               content_key=content_key_for(job))
+
+
+def test_content_key_for_normalizes_org_title_region():
+    a = Job(title="ML Engineer", url="https://a/1", org="Acme Ltd", source="adzuna", region="UK")
+    b = Job(title="ml  engineer", url="https://b/2", org="ACME LIMITED", source="arbeitnow", region="UK")
+    assert content_key_for(a) == content_key_for(b)        # same role -> same key
+
+
+def test_content_key_for_none_without_org():
+    assert content_key_for(Job(title="PostDoc", url="https://x/1", source="rss", region="UK")) is None
+
+
+def test_filter_new_drops_cross_source_duplicate():
+    store = InMemorySeenStore()
+    _seed(store, Job(title="ML Engineer", url="https://boardA/1", org="Acme Ltd",
+                     source="adzuna", region="UK"))
+    dup = Job(title="ML Engineer", url="https://boardB/9", org="ACME LIMITED",
+              source="arbeitnow", region="UK")              # same role, different URL+board
+    assert filter_new([dup], store) == []
+
+
+def test_filter_new_keeps_same_title_different_region():
+    store = InMemorySeenStore()
+    _seed(store, Job(title="ML Engineer", url="https://a/1", org="Acme", source="adzuna", region="UK"))
+    other = Job(title="ML Engineer", url="https://b/2", org="Acme", source="adzuna", region="EU")
+    assert [x.url for x in filter_new([other], store)] == ["https://b/2"]
+
+
+def test_filter_new_collapses_cross_source_within_batch():
+    a = Job(title="ML Engineer", url="https://a/1", org="Acme", source="adzuna", region="UK")
+    b = Job(title="ML Engineer", url="https://b/2", org="Acme", source="arbeitnow", region="UK")
+    assert len(filter_new([a, b], InMemorySeenStore())) == 1
 
 
 def test_filter_new_drops_already_seen():

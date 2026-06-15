@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS seen_jobs (
     notion_page_url TEXT,
     discovered TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Cross-source dedupe key (normalized org+title+region): collapses the same role
+-- listed on multiple boards under different URLs. Added via ALTER for existing DBs.
+ALTER TABLE seen_jobs ADD COLUMN IF NOT EXISTS content_key TEXT;
+CREATE INDEX IF NOT EXISTS idx_seen_jobs_content ON seen_jobs (content_key);
 
 CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY DEFAULT 1,

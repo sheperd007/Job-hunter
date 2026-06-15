@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS seen_jobs (
     org TEXT,
     source TEXT,
     notion_page_url TEXT,
-    discovered TIMESTAMPTZ NOT NULL DEFAULT now()
+    discovered TIMESTAMPTZ NOT NULL DEFAULT now(),
+    content_key TEXT          -- cross-source dedupe key (normalized org+title+region)
 );
+ALTER TABLE seen_jobs ADD COLUMN IF NOT EXISTS content_key TEXT;
+CREATE INDEX IF NOT EXISTS idx_seen_jobs_content ON seen_jobs (content_key);
 
 CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY DEFAULT 1,

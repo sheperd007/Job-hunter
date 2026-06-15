@@ -6,7 +6,7 @@ wraps it with an HTTP GET.
 """
 import xml.etree.ElementTree as ET
 from worker.models import Job
-from worker.normalize import canonical_url, detect_region
+from worker.normalize import detect_region
 from worker.sources.base import get_text
 
 
@@ -25,7 +25,7 @@ def parse_rss(text: str, *, source: str, track_hint: str = "academic",
             region = region_hint
         jobs.append(Job(
             title=title,
-            url=canonical_url(link),
+            url=link,                      # real link; canonicalization is dedup-only
             source=source,
             description=desc,
             region=region,

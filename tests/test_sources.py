@@ -21,7 +21,7 @@ async def test_adzuna_maps_results():
     j = jobs[0]
     assert j.title == "ML Engineer" and j.org == "Acme"
     assert j.region == "UK" and j.source == "adzuna"
-    assert j.url == "https://adzuna.example/job/42"   # canonicalized
+    assert j.url == "https://adzuna.example/job/42?utm=x"   # REAL url kept (link must work)
     assert j.track_hint == "industry"
 
 
@@ -57,5 +57,5 @@ def test_parse_rss():
     assert len(jobs) == 1
     assert jobs[0].source == "jobs.ac.uk"
     assert jobs[0].track_hint == "academic"
-    assert jobs[0].url == "https://jobs.ac.uk/job/123"
+    assert jobs[0].url == "https://jobs.ac.uk/job/123/"   # REAL link kept verbatim
     assert jobs[0].region == "UK"
