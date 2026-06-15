@@ -6,7 +6,7 @@ from worker.ledger import PostgresLedger, InMemoryLedger
 from worker.llm import LLMGateway
 from worker.dedupe import PostgresSeenStore
 from worker.notion import create_page
-from worker.pipeline import run_discovery, gather_jobs
+from worker.pipeline import run_discovery, gather_jobs, load_register
 from worker.profile_build import build_profile
 from worker.triage import triage_email
 from worker.calendar_parse import parse_event
@@ -84,6 +84,7 @@ async def jobs_run():
     profile = _load_profile()
     discovered = _today()
     jobs = await gather_jobs(settings)
+    register = await load_register(settings)
 
     async def notion_create(job, m, v, *, discovered):
         return await create_page(
@@ -94,7 +95,8 @@ async def jobs_run():
 
     return await run_discovery(
         jobs=jobs, profile=profile, gateway=_gateway(), store=store,
-        notion_create=notion_create, discovered=discovered,
+        notion_create=notion_create, register=register,
+        max_match=settings.max_match_per_run, discovered=discovered,
         dry_run=settings.dry_run)
 
 
@@ -128,7 +130,8 @@ def _recent_jobs(date: str) -> list[dict]:
         with psycopg.connect(settings.dsn) as conn:
             rows = conn.execute(
                 "SELECT title, vacancy_url, source, notion_page_url FROM seen_jobs "
-                "WHERE discovered::date = %s ORDER BY discovered DESC", (date,),
+                "WHERE discovered::date = %s AND notion_page_url IS NOT NULL "
+                "ORDER BY discovered DESC", (date,),
             ).fetchall()
         return [{"title": t, "url": u, "source": s, "notion_page_url": n}
                 for (t, u, s, n) in rows]

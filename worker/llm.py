@@ -6,6 +6,12 @@ from worker.pricing import cost
 from worker.ledger import UsageLedger
 
 
+class BudgetExhausted(RuntimeError):
+    """Raised when every key is over its monthly cap. A dedicated type so callers
+    can stop a batch cleanly on budget exhaustion WITHOUT swallowing unrelated
+    RuntimeErrors (which must surface, not masquerade as a clean stop)."""
+
+
 class LLMGateway:
     def __init__(self, *, settings: Settings, ledger: UsageLedger, now_month: str):
         self.s = settings
@@ -18,7 +24,7 @@ class LLMGateway:
         spend = self.ledger.month_spend(self.now_month)
         d = choose(task, spend, margin=self.s.cap_safety_margin_usd)
         if d.blocked:
-            raise RuntimeError("LLM budget exhausted for all keys this month")
+            raise BudgetExhausted("LLM budget exhausted for all keys this month")
         api_key = self.s.openai_key_a if d.key == "a" else self.s.openai_key_b
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(

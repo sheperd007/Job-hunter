@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     adzuna_app_id: str = ""
     adzuna_app_key: str = ""
 
+    # Per-run cap on LLM match scoring (cost guard). ~189 in-region jobs/day reach
+    # scoring under the soft visa gate; capping keeps key B under the $8/mo cap.
+    # Uncapped runs are bounded only by the Budget Guard hard stop.
+    max_match_per_run: int = 40
+
+    # Optional licensed-sponsor register CSV (e.g. UK Home Office list). When set,
+    # employers on the list are flagged "On sponsor register" (strongest visa
+    # signal). Unset -> register check skipped; soft gate still surfaces jobs.
+    sponsor_register_url: str = ""
+
     @property
     def dsn(self) -> str:
         """Postgres connection string. DATABASE_URL wins if set; otherwise built

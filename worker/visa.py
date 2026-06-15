@@ -88,5 +88,11 @@ def assess(*, job: Job, register: SponsorRegister | None = None,
                            evidence="academic role; universities routinely sponsor researcher visas",
                            eligible=True)
 
+    # Soft gate: no explicit signal is NOT a hard drop. Mainstream job boards
+    # (adzuna) never advertise sponsorship, so a hard drop here removes ~every
+    # listing before scoring. Surface it instead, flagged "Unclear" (recorded in
+    # Notion's "Visa support" field), and let the human judge. Only an explicit
+    # refusal (sign == "neg", handled above) is disqualifying.
     return VisaVerdict(label="Unclear", confidence=0.3,
-                       evidence="no explicit sponsorship signal", eligible=False)
+                       evidence="no explicit sponsorship signal — surfaced for manual visa check",
+                       eligible=True)

@@ -42,8 +42,16 @@ def test_academic_default_eligible():
     assert v.eligible is True and "academia" in v.label.lower()
 
 
-def test_industry_no_signal_dropped():
+def test_industry_no_signal_surfaced_soft_gate():
+    # Soft gate: no explicit sponsorship signal is no longer a hard drop. The job
+    # is surfaced (eligible) but flagged "Unclear" so a human checks visa later.
     v = assess(job=job(desc="Great team, fast pace."), academic=False)
+    assert v.eligible is True and v.label == "Unclear"
+
+
+def test_explicit_negative_still_hard_dropped():
+    # The only visa hard-drop that survives the soft gate: an explicit refusal.
+    v = assess(job=job(desc="We do not sponsor visas; right to work in the UK required."))
     assert v.eligible is False
 
 

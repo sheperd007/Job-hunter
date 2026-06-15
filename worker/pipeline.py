@@ -5,16 +5,21 @@ fakes). gather_jobs() is the runtime glue that calls the real source clients.
 """
 from worker.dedupe import filter_new
 from worker.normalize import in_target_region
-from worker.visa import assess
+from worker.visa import assess, SponsorRegister
+from worker.sources.base import get_text
+from worker.llm import BudgetExhausted
 from worker.match import score
 
 
 async def run_discovery(*, jobs, profile, gateway, store, notion_create,
                         register=None, min_score: int = 60,
+                        max_match: int | None = None,
                         discovered: str, dry_run: bool = False) -> dict:
     new = filter_new(jobs, store)
     inserted: list[dict] = []
     eligible = 0
+    scored = 0
+    capped = False
     dropped = {"region": 0, "visa": 0, "score": 0}
 
     for job in new:
@@ -30,8 +35,27 @@ async def run_discovery(*, jobs, profile, gateway, store, notion_create,
             inserted.append({"title": job.title, "url": job.url,
                              "visa": v.label, "dry_run": True})
             continue
-        m = await score(job, profile, gateway)
+        # Cost guard: cap LLM scoring per run. Jobs beyond the cap are simply left
+        # for a later run (never marked seen), so coverage rolls forward day to day.
+        if max_match is not None and scored >= max_match:
+            capped = True
+            break
+        try:
+            m = await score(job, profile, gateway)
+        except BudgetExhausted:
+            # All keys over the monthly cap — stop cleanly, keep what we already
+            # inserted, rather than 500-ing and triggering W3 retries. Other
+            # RuntimeErrors are real bugs and propagate (must not look like a stop).
+            capped = True
+            break
+        scored += 1
         if m.score < min_score:
+            # A definitive negative against a stable profile — mark it seen (no
+            # Notion page) so it is not re-scored, and re-paid for, every run. This
+            # also stops the per-run cap being consumed by the same front-of-list
+            # rejects daily, which would starve genuinely new jobs further down.
+            store.mark(url=job.url, title=job.title, org=job.org,
+                       source=job.source, notion_page_url=None)
             dropped["score"] += 1
             continue
         res = await notion_create(job, m, v, discovered=discovered)
@@ -41,8 +65,24 @@ async def run_discovery(*, jobs, profile, gateway, store, notion_create,
                          "visa": v.label, "notion": res.get("url")})
 
     return {"considered": len(jobs), "new": len(new), "eligible": eligible,
-            "inserted": 0 if dry_run else len(inserted), "dropped": dropped,
-            "dry_run": dry_run, "items": inserted}
+            "scored": scored, "inserted": 0 if dry_run else len(inserted),
+            "dropped": dropped, "capped": capped, "dry_run": dry_run,
+            "items": inserted}
+
+
+async def load_register(settings, *, fetch=None) -> SponsorRegister | None:
+    """Best-effort load of the licensed-sponsor register from a configured CSV
+    URL. Returns None (soft gate still surfaces jobs) when the URL is unset or the
+    fetch/parse fails — a missing register must never break discovery."""
+    url = getattr(settings, "sponsor_register_url", "")
+    if not url:
+        return None
+    fetch = fetch or get_text
+    try:
+        text = await fetch(url)
+        return SponsorRegister.from_csv_text(text)
+    except Exception:  # noqa: BLE001 — register is an enhancement, never fatal
+        return None
 
 
 async def gather_jobs(settings, queries: list[str] | None = None) -> list:
