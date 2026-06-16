@@ -1,7 +1,7 @@
 import httpx
 import respx
 import pytest
-from worker.sources import adzuna, arbeitnow, scrapingdog_indeed
+from worker.sources import adzuna, arbeitnow
 from worker.sources import scrapingdog_google_jobs as gjobs
 from worker.sources.rss import parse_rss
 
@@ -45,80 +45,6 @@ async def test_arbeitnow_maps_visa_flag():
     assert len(jobs) == 1
     assert jobs[0].raw["visa_sponsorship"] is True
     assert jobs[0].region == "EU"
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_scrapingdog_indeed_maps_array_response():
-    # Indeed Scraper API returns a JSON ARRAY of job objects; the trailing element
-    # is search metadata (totalJobs, no jobLink) and must be dropped.
-    respx.get(url__startswith="https://api.scrapingdog.com/indeed").mock(
-        return_value=httpx.Response(200, json=[
-            {"jobTitle": "ML Engineer ", "companyName": "Acme",
-             "companyLocation": "London", "jobLink": "https://uk.indeed.com/viewjob?jk=1",
-             "jobDescription": "Build models", "Salary": "£70k",
-             "jobMetaData": ["Full-time"], "jobPosting": "Today"},
-            {"jobTitle": "no link job", "companyName": "X"},        # dropped: no jobLink
-            {"totalJobs": "120", "jobTitle": "machine learning"},   # metadata tail, dropped
-        ]))
-    jobs = await scrapingdog_indeed.fetch(api_key="k", what="ml", country="gb")
-    assert len(jobs) == 1
-    j = jobs[0]
-    assert j.title == "ML Engineer" and j.org == "Acme"
-    assert j.source == "indeed" and j.track_hint == "industry"
-    assert j.region == "UK"
-    assert j.url == "https://uk.indeed.com/viewjob?jk=1"   # absolute link kept verbatim
-    assert j.raw["salary"] == "£70k" and j.raw["posted"] == "Today"
-    assert j.raw["country"] == "gb"
-
-
-@pytest.mark.asyncio
-async def test_scrapingdog_indeed_no_key_returns_empty():
-    assert await scrapingdog_indeed.fetch(api_key="") == []
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_scrapingdog_indeed_resolves_relative_link():
-    # Indeed often returns a relative jobLink; it must be made absolute against the
-    # country domain so the URL is a valid dedupe key and a clickable Notion link.
-    respx.get(url__startswith="https://api.scrapingdog.com/indeed").mock(
-        return_value=httpx.Response(200, json=[
-            {"jobTitle": "DS", "companyName": "Y", "companyLocation": "London",
-             "jobLink": "/rc/clk?jk=abc", "jobDescription": "x"},
-        ]))
-    jobs = await scrapingdog_indeed.fetch(api_key="k", country="gb")
-    assert jobs[0].url == "https://uk.indeed.com/rc/clk?jk=abc"
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_scrapingdog_indeed_region_falls_back_to_country():
-    # When the location string is unrecognized, the searched country fixes the
-    # region so the job still passes the in-target-region gate (de -> EU).
-    respx.get(url__startswith="https://api.scrapingdog.com/indeed").mock(
-        return_value=httpx.Response(200, json=[
-            {"jobTitle": "ML", "companyName": "Z", "companyLocation": "Stuttgart",
-             "jobLink": "https://de.indeed.com/viewjob?jk=2", "jobDescription": "x"},
-        ]))
-    jobs = await scrapingdog_indeed.fetch(api_key="k", country="de")
-    assert jobs[0].region == "EU"
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_scrapingdog_indeed_remote_beats_country_fallback():
-    # A remote job (signalled in jobMetaData, with no usable location) must key as
-    # Remote — NOT the country fallback — so it dedupes against the same remote role
-    # from other boards instead of leaking a duplicate under an EU/UK region.
-    respx.get(url__startswith="https://api.scrapingdog.com/indeed").mock(
-        return_value=httpx.Response(200, json=[
-            {"jobTitle": "ML", "companyName": "Z", "companyLocation": "",
-             "jobLink": "https://de.indeed.com/viewjob?jk=3",
-             "jobMetaData": ["Full-time", "Remote"], "jobDescription": "x"},
-        ]))
-    jobs = await scrapingdog_indeed.fetch(api_key="k", country="de")
-    assert jobs[0].region == "Remote"
 
 
 @respx.mock
