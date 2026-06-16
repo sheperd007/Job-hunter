@@ -3,7 +3,8 @@ and the current month's LLM spend. Pure formatter — unit-tested directly.
 """
 
 
-def build_digest(*, jobs: list[dict], budget: dict, date: str) -> dict:
+def build_digest(*, jobs: list[dict], budget: dict, date: str,
+                 cap: float = 10.0) -> dict:
     n = len(jobs)
     html = [f"<b>{date} — Job Agent digest</b>",
             f"{n} new match(es) added to your Notion Career Hub."]
@@ -20,7 +21,7 @@ def build_digest(*, jobs: list[dict], budget: dict, date: str) -> dict:
 
     a = float(budget.get("a", 0.0))
     b = float(budget.get("b", 0.0))
-    foot = f"LLM spend this month — key A ${a:.2f}/8, key B ${b:.2f}/8."
+    foot = f"LLM spend this month — key A ${a:.2f}/{cap:g}, key B ${b:.2f}/{cap:g}."
     html.append(f"<i>{foot}</i>")
     text.append(foot)
 

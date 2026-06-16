@@ -12,6 +12,7 @@ from worker.triage import triage_email
 from worker.calendar_parse import parse_event
 from worker.digest import build_digest
 from worker.pending import PostgresPendingStore
+from worker.notify import telegram_notify
 
 app = FastAPI(title="job-agent-worker")
 settings = Settings()
@@ -93,11 +94,19 @@ async def jobs_run():
             version=settings.notion_version, discovered=discovered,
             dry_run=settings.dry_run)
 
-    return await run_discovery(
+    result = await run_discovery(
         jobs=jobs, profile=profile, gateway=_gateway(), store=store,
         notion_create=notion_create, register=register,
         max_match=settings.max_match_per_run, discovered=discovered,
         dry_run=settings.dry_run)
+
+    # Best-effort run-completion ping (never fails the run).
+    await telegram_notify(
+        settings,
+        f"✅ Job discovery finished — {result['inserted']} new job(s) in Notion "
+        f"(considered {result['considered']}, scored {result['scored']}"
+        f"{', cap hit' if result['capped'] else ''}).")
+    return result
 
 
 class ProfileReq(BaseModel):
@@ -144,7 +153,8 @@ def digest_ep():
     """W4: assemble the daily digest (email HTML + Telegram text)."""
     date = _today()
     budget = {k: v.month_usd for k, v in _ledger().month_spend(_month()).items()}
-    return build_digest(jobs=_recent_jobs(date), budget=budget, date=date)
+    return build_digest(jobs=_recent_jobs(date), budget=budget, date=date,
+                        cap=settings.monthly_cap_usd)
 
 
 class PendingReq(BaseModel):

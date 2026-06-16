@@ -3,12 +3,23 @@
 run_discovery() is the pure, injectable core (deps passed in -> unit-tested with
 fakes). gather_jobs() is the runtime glue that calls the real source clients.
 """
+from itertools import zip_longest
 from worker.dedupe import filter_new, content_key_for
 from worker.normalize import in_target_region
 from worker.visa import assess, SponsorRegister
 from worker.sources.base import get_text
 from worker.llm import BudgetExhausted
 from worker.match import score
+
+
+def _interleave(lists: list[list]) -> list:
+    """Round-robin merge several source lists into one (source 0 item 0, source 1
+    item 0, ..., source 0 item 1, ...). Keeps the per-run scoring cap from being
+    monopolized by whichever source is gathered first."""
+    out: list = []
+    for tup in zip_longest(*lists):
+        out.extend(x for x in tup if x is not None)
+    return out
 
 
 async def run_discovery(*, jobs, profile, gateway, store, notion_create,
@@ -87,38 +98,40 @@ async def load_register(settings, *, fetch=None) -> SponsorRegister | None:
 
 
 async def gather_jobs(settings, queries: list[str] | None = None) -> list:
-    """Runtime: pull from each configured source. One source failing never fails
-    the whole run."""
-    from worker.sources import adzuna, arbeitnow, scrapingdog_indeed
+    """Runtime: pull from each configured source into its own bucket, then
+    round-robin interleave so the per-run scoring cap samples every source. One
+    source failing never fails the whole run."""
+    from worker.sources import adzuna, arbeitnow, scrapingdog_google_jobs
     from worker.sources.rss import fetch_rss
 
     queries = queries or ["machine learning", "deep learning", "data scientist",
                           "NLP", "generative AI"]
-    out: list = []
 
-    async def _safe(coro):
-        try:
-            out.extend(await coro)
-        except Exception:  # noqa: BLE001 — isolate per-source failures
-            pass
+    async def _collect(coros: list) -> list:
+        bucket: list = []
+        for coro in coros:
+            try:
+                bucket.extend(await coro)
+            except Exception:  # noqa: BLE001 — isolate per-source failures
+                pass
+        return bucket
 
-    for country in ("gb", "de", "nl", "ca", "au"):
-        for q in queries[:2]:
-            await _safe(adzuna.fetch(app_id=settings.adzuna_app_id,
-                                     app_key=settings.adzuna_app_key,
-                                     country=country, what=q))
-    await _safe(arbeitnow.fetch())
-    # Indeed via Scrapingdog (no official Indeed API). Only runs when a key is set.
-    # Medium credit guard: 3 queries x 5 countries = 15 requests/run (~15 credits).
-    if settings.scrapingdog_key:
-        for country in ("gb", "de", "nl", "ca", "au"):
-            for q in queries[:3]:
-                await _safe(scrapingdog_indeed.fetch(
-                    api_key=settings.scrapingdog_key, country=country, what=q))
+    adzuna_jobs = await _collect([
+        adzuna.fetch(app_id=settings.adzuna_app_id, app_key=settings.adzuna_app_key,
+                     country=country, what=q)
+        for country in ("gb", "de", "nl", "ca", "au") for q in queries[:2]])
+    arbeitnow_jobs = await _collect([arbeitnow.fetch()])
+    # Google Jobs via Scrapingdog (aggregates LinkedIn/Indeed/company sites). Only
+    # runs when a key is set. Credit guard: 2 queries x 5 countries = 10 credits/run.
+    google_jobs = await _collect([
+        scrapingdog_google_jobs.fetch(api_key=settings.scrapingdog_key,
+                                      country=country, what=q)
+        for country in ("gb", "de", "nl", "ca", "au") for q in queries[:2]]
+    ) if settings.scrapingdog_key else []
     # Academic RSS feeds (no key needed)
-    for url, src in [
-        ("https://www.jobs.ac.uk/feeds/jobs", "jobs.ac.uk"),
-        ("https://euraxess.ec.europa.eu/jobs/search/feed", "euraxess"),
-    ]:
-        await _safe(fetch_rss(url, source=src, track_hint="academic"))
-    return out
+    rss_jobs = await _collect([
+        fetch_rss(url, source=src, track_hint="academic")
+        for url, src in [("https://www.jobs.ac.uk/feeds/jobs", "jobs.ac.uk"),
+                         ("https://euraxess.ec.europa.eu/jobs/search/feed", "euraxess")]])
+
+    return _interleave([adzuna_jobs, arbeitnow_jobs, google_jobs, rss_jobs])

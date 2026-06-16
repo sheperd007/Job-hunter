@@ -1,0 +1,13 @@
+# Iran DNS sinkhole workaround: api.telegram.org is DNS-poisoned to 10.10.34.x.
+# The real Telegram DC IP (149.154.167.220) is reachable, so pin it for every
+# container that talks to Telegram: n8n (Telegram nodes + Telegram Trigger) and
+# the worker (run-completion ping in worker/notify.py).
+# Update the IP if Telegram ever rotates it (verify with:
+#   curl --resolve api.telegram.org:443:<ip> https://api.telegram.org/bot<token>/getMe)
+services:
+  n8n:
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
+  worker:
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"

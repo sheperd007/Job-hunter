@@ -39,6 +39,11 @@ class Settings(BaseSettings):
 
     dry_run: bool = False
 
+    # Telegram (worker-side run-completion ping only; n8n owns digest/approvals).
+    # Token is a secret file in hardened mode; chat id comes from env TELEGRAM_CHAT_ID.
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     # Notion (worker performs all Notion writes)
     notion_token: str = ""
     notion_applications_db: str = "70b08f56f7fc4825b9e45993a409cb11"  # Applications database id

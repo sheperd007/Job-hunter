@@ -24,6 +24,8 @@ secrets:
   openai_key_b:            { file: ./secrets/openai_key_b }
   notion_token:            { file: ./secrets/notion_token }
   adzuna_app_key:          { file: ./secrets/adzuna_app_key }
+  scrapingdog_key:         { file: ./secrets/scrapingdog_key }
+  telegram_bot_token:      { file: ./secrets/telegram_bot_token }
   n8n_encryption_key:      { file: ./secrets/n8n_encryption_key }
   n8n_basic_auth_password: { file: ./secrets/n8n_basic_auth_password }
 
@@ -51,6 +53,8 @@ services:
       - openai_key_b
       - notion_token
       - adzuna_app_key
+      - scrapingdog_key
+      - telegram_bot_token
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
     read_only: true

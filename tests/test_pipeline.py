@@ -1,5 +1,15 @@
 import pytest
-from worker.pipeline import run_discovery, load_register
+from worker.pipeline import run_discovery, load_register, _interleave
+
+
+def test_interleave_round_robins_sources():
+    # So the per-run scoring cap samples every source instead of being eaten by
+    # whichever source happens to come first.
+    assert _interleave([[1, 2, 3], [10, 20], [100]]) == [1, 10, 100, 2, 20, 3]
+
+
+def test_interleave_skips_empty_sources():
+    assert _interleave([[], [1], [], [2, 3]]) == [1, 2, 3]
 from worker.dedupe import InMemorySeenStore
 from worker.llm import BudgetExhausted
 from worker.models import Job
