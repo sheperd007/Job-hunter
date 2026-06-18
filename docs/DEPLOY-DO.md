@@ -31,7 +31,7 @@ This provisions: `worker` (internal), `n8n` (public, HTTPS), a Managed Postgres
 |---|---|---|
 | `OPENAI_KEY_A`, `OPENAI_KEY_B` | worker | your two keys ($8 cap enforced in code) |
 | `NOTION_TOKEN` | worker | Notion internal integration token |
-| `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | worker | from developer.adzuna.com |
+| `SCRAPINGDOG_KEY` | worker | from scrapingdog.com (optional — Google Jobs source) |
 | `N8N_ENCRYPTION_KEY` | n8n | random 32+ chars — **keep stable** or saved creds break |
 | `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD` | n8n | login for the n8n UI |
 

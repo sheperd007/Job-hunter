@@ -115,30 +115,24 @@ For the daily digest + one-tap approvals.
 6. `OWNER_EMAIL` = your Gmail address (where the digest is sent).
    `GOOGLE_CALENDAR_ID=primary` (or a specific calendar id from Calendar settings).
 
-### 5. Adzuna (job source) — `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`
+### 5. Scrapingdog — Google Jobs (optional) — `SCRAPINGDOG_KEY`
 
-1. <https://developer.adzuna.com/> → register → create an app → copy **app_id**
-   and **app_key**. Free tier is plenty.
-   (Arbeitnow + EURAXESS + jobs.ac.uk need no key.)
-
-### 6. Scrapingdog — Indeed (optional) — `SCRAPINGDOG_KEY`
-
-Indeed has **no usable official job-search API** (the Publisher API is
-deprecated), so Indeed is pulled via [Scrapingdog](https://www.scrapingdog.com/)'s
-Indeed Scraper API (1 credit/request, parsed JSON).
+Google Jobs aggregates postings across many boards (LinkedIn, Indeed, company
+career sites) into one feed, pulled via [Scrapingdog](https://www.scrapingdog.com/)'s
+Google Jobs API (1 credit/request, parsed JSON).
 
 1. Sign up at <https://www.scrapingdog.com/> → copy the API key from the dashboard
    into `SCRAPINGDOG_KEY`.
-2. **Leave it empty to skip Indeed entirely** — the source only runs when the key
-   is set. Each discovery run makes **~15 requests** (3 queries × 5 countries),
-   i.e. ~15 credits/run (~450/month). Tune the loop in
+2. **Leave it empty to skip the source entirely** — it only runs when the key is
+   set. Each discovery run makes **~10 requests** (2 queries × 5 countries),
+   i.e. ~10 credits/run (~300/month). Tune the loop in
    [`worker/pipeline.py`](worker/pipeline.py) (`gather_jobs`) to spend more/less.
 
-> Indeed postings carry no structured visa flag, so they pass the *soft* visa gate
-> and reach the LLM matcher — which spends OpenAI budget. The `MAX_MATCH_PER_RUN`
+> Google Jobs postings carry no structured visa flag, so they pass the *soft* visa
+> gate and reach the LLM matcher — which spends OpenAI budget. The `MAX_MATCH_PER_RUN`
 > cap still bounds that cost.
 
-### 7. n8n / infra
+### 6. n8n / infra
 
 | Var | What |
 |---|---|

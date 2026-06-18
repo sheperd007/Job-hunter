@@ -8,7 +8,7 @@ class Job(BaseModel):
     org: str = ""
     location: str = ""
     url: str                       # canonical URL; the dedupe key
-    source: str = ""               # e.g. "adzuna", "euraxess"
+    source: str = ""               # e.g. "google_jobs", "euraxess"
     description: str = ""
     deadline: str | None = None    # ISO date if known
     region: str = ""               # UK / EU / Canada / AU-NZ / US / Remote / Other

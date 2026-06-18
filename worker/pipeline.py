@@ -101,7 +101,7 @@ async def gather_jobs(settings, queries: list[str] | None = None) -> list:
     """Runtime: pull from each configured source into its own bucket, then
     round-robin interleave so the per-run scoring cap samples every source. One
     source failing never fails the whole run."""
-    from worker.sources import adzuna, arbeitnow, scrapingdog_google_jobs
+    from worker.sources import arbeitnow, scrapingdog_google_jobs
     from worker.sources.rss import fetch_rss
 
     queries = queries or ["machine learning", "deep learning", "data scientist",
@@ -116,10 +116,6 @@ async def gather_jobs(settings, queries: list[str] | None = None) -> list:
                 pass
         return bucket
 
-    adzuna_jobs = await _collect([
-        adzuna.fetch(app_id=settings.adzuna_app_id, app_key=settings.adzuna_app_key,
-                     country=country, what=q)
-        for country in ("gb", "de", "nl", "ca", "au") for q in queries[:2]])
     arbeitnow_jobs = await _collect([arbeitnow.fetch()])
     # Google Jobs via Scrapingdog (aggregates LinkedIn/Indeed/company sites). Only
     # runs when a key is set. Credit guard: 2 queries x 5 countries = 10 credits/run.
@@ -134,4 +130,4 @@ async def gather_jobs(settings, queries: list[str] | None = None) -> list:
         for url, src in [("https://www.jobs.ac.uk/feeds/jobs", "jobs.ac.uk"),
                          ("https://euraxess.ec.europa.eu/jobs/search/feed", "euraxess")]])
 
-    return _interleave([adzuna_jobs, arbeitnow_jobs, google_jobs, rss_jobs])
+    return _interleave([arbeitnow_jobs, google_jobs, rss_jobs])

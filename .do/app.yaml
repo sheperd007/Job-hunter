@@ -47,9 +47,7 @@ services:
         type: SECRET
       - key: NOTION_APPLICATIONS_DB
         value: "70b08f56f7fc4825b9e45993a409cb11"
-      - key: ADZUNA_APP_ID
-        type: SECRET
-      - key: ADZUNA_APP_KEY
+      - key: SCRAPINGDOG_KEY
         type: SECRET
 
   # ---- n8n orchestrator (public UI + webhooks, auto HTTPS) ----

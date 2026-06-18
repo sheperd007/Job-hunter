@@ -34,7 +34,7 @@ class CountingGateway:
 def eligible_jobs(n):
     """n in-region, visa-eligible industry jobs."""
     return [Job(title=f"ML {i}", org=f"Org{i}", url=f"https://x.com/{i}",
-                source="adzuna", region="EU", track_hint="industry",
+                source="google_jobs", region="EU", track_hint="industry",
                 description="visa sponsorship offered")
             for i in range(n)]
 
@@ -56,9 +56,9 @@ def jobs():
     return [
         Job(title="ML Eng EU", org="Acme", url="https://x.com/eu", source="arbeitnow",
             region="EU", track_hint="industry", description="visa sponsorship offered"),
-        Job(title="ML Eng US", org="Beta", url="https://x.com/us", source="adzuna",
+        Job(title="ML Eng US", org="Beta", url="https://x.com/us", source="google_jobs",
             region="US", track_hint="industry", description="visa sponsorship offered"),
-        Job(title="DS no-visa", org="Gamma", url="https://x.com/nv", source="adzuna",
+        Job(title="DS no-visa", org="Gamma", url="https://x.com/nv", source="google_jobs",
             region="EU", track_hint="industry", description="must already have right to work"),
     ]
 

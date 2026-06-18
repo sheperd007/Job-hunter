@@ -35,11 +35,10 @@ secrets as files, `DRY_RUN=false` (live).
 |---|---|---|
 | OpenAI key A / B | `secrets/openai_key_a`, `_b` | worker (pydantic `secrets_dir`) |
 | Notion token | `secrets/notion_token` | worker |
-| Adzuna **app_key** | `secrets/adzuna_app_key` | worker |
+| Scrapingdog **key** | `secrets/scrapingdog_key` | worker |
 | DB password | `secrets/db_password` | postgres / n8n / worker |
 | n8n encryption key | `secrets/n8n_encryption_key` | n8n (keep STABLE) |
 | n8n basic-auth pwd | `secrets/n8n_basic_auth_password` | n8n (superseded — see note) |
-| Adzuna **app_id** | `.env` `ADZUNA_APP_ID` (non-secret) | worker |
 | Telegram **chat_id** | `.env` `TELEGRAM_CHAT_ID` (non-secret) | n8n workflows (`$env`) |
 | Telegram **bot token** | n8n "Telegram account" credential **and** hardcoded in W5 `getUpdates` URL | n8n |
 | Google (Gmail+Calendar) | n8n OAuth2 credentials | n8n |
@@ -61,7 +60,7 @@ Tested reachability from the server:
 
 | Host | Result |
 |---|---|
-| OpenAI, Notion, Adzuna | ✅ reachable, keys validated (HTTP 200) |
+| OpenAI, Notion, Scrapingdog | ✅ reachable, keys validated (HTTP 200) |
 | Google (oauth2 / gmail / accounts / googleapis) | ✅ reachable |
 | **api.telegram.org** | ❌ **DNS-sinkholed** → `10.10.34.36` (Iran filternet); times out |
 
@@ -191,7 +190,6 @@ NOTION_VERSION=2022-06-28
 OWNER_EMAIL=<owner gmail>
 WORKER_URL=http://worker:8000
 GOOGLE_CALENDAR_ID=primary
-ADZUNA_APP_ID=<adzuna app id>
 TELEGRAM_CHAT_ID=<numeric chat id>
 ```
 No passwords/keys/tokens in `.env` (hardened mode reads those from `secrets/*`).
@@ -251,7 +249,7 @@ to Notion (dropped: region 107, visa 177, score 2). LLM spend key B ≈ `$0.02`.
   Anyone who reads that file gets root on the server. Delete it or move to a
   Pageant/agent flow when automation is done.
 - Secrets and the LUKS passphrase were transmitted in a chat session — **rotate**
-  if that channel isn't trusted (OpenAI keys, Notion token, Adzuna key, bot token,
+  if that channel isn't trusted (OpenAI keys, Notion token, Scrapingdog key, bot token,
   LUKS passphrase, n8n login).
 - Hardening does **not** protect against a host root / docker-group user — they can
   read container memory and the docker socket regardless (see `docs/SECURITY.md`).

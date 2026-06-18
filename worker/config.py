@@ -50,9 +50,7 @@ class Settings(BaseSettings):
     notion_version: str = "2022-06-28"
 
     # Job source keys
-    adzuna_app_id: str = ""
-    adzuna_app_key: str = ""
-    scrapingdog_key: str = ""        # Indeed via Scrapingdog scraper API (1 credit/req)
+    scrapingdog_key: str = ""        # Google Jobs via Scrapingdog scraper API
 
     # Per-run cap on LLM match scoring (cost guard). ~189 in-region jobs/day reach
     # scoring under the soft visa gate; capping keeps key B under the $10/mo cap.

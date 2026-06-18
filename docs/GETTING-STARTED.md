@@ -16,7 +16,7 @@ hardened), finish setup in n8n, and the commands you'll use day to day.
 | Notion integration token | writing jobs to Career Hub | §1.2 |
 | Telegram bot token + chat id | digest + one-tap approvals | §1.3 |
 | Google OAuth client (Gmail+Calendar) | email + calendar | §1.4 |
-| Adzuna app id + key | a job source | §1.5 |
+| Scrapingdog key (optional) | Google Jobs source | §1.5 |
 
 ---
 
@@ -68,10 +68,10 @@ Platform**.
    - Copy **Client ID** + **Client secret** (used in §4.1).
 5. `OWNER_EMAIL` = your Gmail. `GOOGLE_CALENDAR_ID = primary`.
 
-### 1.5 Adzuna
-1. <https://developer.adzuna.com> → register → create an app → copy **app_id** +
-   **app_key** → `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`. (Free tier is plenty;
-   Arbeitnow + EURAXESS + jobs.ac.uk need no key.)
+### 1.5 Scrapingdog (optional — Google Jobs source)
+1. <https://www.scrapingdog.com> → sign up → copy the API key → `SCRAPINGDOG_KEY`.
+   Leave it empty to skip Google Jobs. (Arbeitnow + EURAXESS + jobs.ac.uk need no
+   key either.)
 
 ---
 
@@ -80,7 +80,7 @@ Platform**.
 ### Normal mode (single-user host) — use `.env`
 ```bash
 cp .env.example .env
-nano .env          # fill OPENAI_KEY_A/B, NOTION_TOKEN, TELEGRAM_*, ADZUNA_*, OWNER_EMAIL, passwords
+nano .env          # fill OPENAI_KEY_A/B, NOTION_TOKEN, TELEGRAM_*, SCRAPINGDOG_KEY, OWNER_EMAIL, passwords
 ```
 
 ### Hardened mode (shared host) — secret-free `.env` + `./secrets/*` files
@@ -88,7 +88,7 @@ Use the **secret-free** template so no secret is ever injected into the containe
 environment (env always outranks the secret files, so a secret left in `.env`
 would both leak in `docker inspect` and silently override the file):
 ```bash
-cp .env.hardened.example .env      # NON-secret config only; edit ADZUNA_APP_ID, TELEGRAM_CHAT_ID, DATA_DIR
+cp .env.hardened.example .env      # NON-secret config only; edit TELEGRAM_CHAT_ID, DATA_DIR
 ```
 Then put the real secrets in files (see [`secrets/README.md`](../secrets/README.md)):
 ```bash
@@ -96,7 +96,7 @@ umask 077
 printf '%s' 'sk-...A...'              > secrets/openai_key_a
 printf '%s' 'sk-...B...'              > secrets/openai_key_b
 printf '%s' 'ntn_...'                 > secrets/notion_token
-printf '%s' '...adzuna_app_key...'    > secrets/adzuna_app_key
+printf '%s' '...scrapingdog_key...'    > secrets/scrapingdog_key
 printf '%s' 'a-strong-db-pass'        > secrets/db_password
 printf '%s' "$(openssl rand -hex 24)" > secrets/n8n_encryption_key
 printf '%s' 'n8n-ui-password'         > secrets/n8n_basic_auth_password
