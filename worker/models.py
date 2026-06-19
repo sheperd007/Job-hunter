@@ -21,6 +21,7 @@ class VisaVerdict(BaseModel):
     confidence: float   # 0..1
     evidence: str = ""  # short snippet justifying the label
     eligible: bool      # passes the filter (kept) or not (dropped)
+    source: str = "keyword"  # keyword | register | source_flag | llm | academic (provenance for reconcile precedence)
 
 
 class MatchResult(BaseModel):
@@ -29,3 +30,8 @@ class MatchResult(BaseModel):
     track: str = ""     # Academic - PhD/PostDoc/Lectureship/Faculty | Industry
     tags: list[str] = Field(default_factory=list)
     priority: str = "Low"   # High / Medium / Low
+    # Visa/relocation intent classified by the LLM in the same match call (no extra
+    # call). Reconciled into the VisaVerdict for keyword-"Unclear" jobs only.
+    visa_intent: str = "unclear"     # sponsors | relocation | unclear | negative
+    visa_confidence: float = 0.0     # 0..1
+    visa_evidence: str = ""

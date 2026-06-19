@@ -1,5 +1,5 @@
 import pytest
-from worker.match import score, _extract_json, _priority
+from worker.match import score, _extract_json, _priority, effective_score
 from worker.models import Job
 
 
@@ -52,3 +52,46 @@ async def test_score_clamps_out_of_range():
     gw = FakeGateway('{"score": 250}')
     r = await score(job(), {}, gw)
     assert r.score == 100
+
+
+def test_effective_score_boosts_high_visa_confidence():
+    # at equal fit, a strong visa signal outranks an unclear one
+    assert effective_score(80, 0.9, 20) > effective_score(80, 0.3, 20)
+
+
+def test_effective_score_neutral_at_half():
+    assert effective_score(70, 0.5, 20) == 70
+
+
+def test_effective_score_weight_zero_is_kill_switch():
+    assert effective_score(73, 0.9, 0) == 73
+
+
+def test_effective_score_clamps_0_100():
+    assert effective_score(99, 1.0, 20) == 100
+    assert effective_score(1, 0.0, 50) == 0
+
+
+@pytest.mark.asyncio
+async def test_score_parses_visa_object():
+    gw = FakeGateway('{"score": 70, "visa": {"intent": "sponsors", '
+                     '"confidence": 0.9, "evidence": "we sponsor visas"}}')
+    r = await score(job(), {}, gw)
+    assert r.visa_intent == "sponsors"
+    assert r.visa_confidence == 0.9
+    assert "sponsor" in r.visa_evidence
+
+
+@pytest.mark.asyncio
+async def test_score_missing_visa_defaults_unclear():
+    gw = FakeGateway('{"score": 70}')
+    r = await score(job(), {}, gw)
+    assert r.visa_intent == "unclear" and r.visa_confidence == 0.0
+
+
+@pytest.mark.asyncio
+async def test_score_junk_visa_intent_and_confidence_coerced():
+    gw = FakeGateway('{"score": 70, "visa": {"intent": "banana", "confidence": 5}}')
+    r = await score(job(), {}, gw)
+    assert r.visa_intent == "unclear"      # invalid intent -> unclear
+    assert r.visa_confidence == 1.0        # 5 clamped to 1.0

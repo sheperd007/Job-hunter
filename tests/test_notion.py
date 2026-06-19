@@ -30,6 +30,15 @@ def test_build_properties_maps_fields():
     assert p["Discovered"]["date"]["start"] == "2026-06-12"
 
 
+def test_build_properties_uses_effective_score():
+    job, match, visa = fixtures()                  # match.score == 82
+    p = build_properties(job, match, visa, discovered="2026-06-12",
+                         effective_score=89)
+    assert p["Match score"]["number"] == 89        # effective drives the sort field
+    notes = p["Notes"]["rich_text"][0]["text"]["content"]
+    assert "82/100" in notes and "89" in notes     # raw fit + effective both shown
+
+
 @pytest.mark.asyncio
 async def test_create_page_dry_run_skips_api():
     job, match, visa = fixtures()

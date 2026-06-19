@@ -1,9 +1,59 @@
-from worker.visa import assess, keyword_scan, normalize_org, SponsorRegister
-from worker.models import Job
+from worker.visa import assess, keyword_scan, normalize_org, SponsorRegister, reconcile
+from worker.models import Job, MatchResult
 
 
 def job(title="ML Engineer", desc="", org="", raw=None):
     return Job(title=title, description=desc, org=org, url="https://x.com/1", raw=raw or {})
+
+
+def _match(intent="unclear", conf=0.0):
+    return MatchResult(score=70, visa_intent=intent, visa_confidence=conf,
+                       visa_evidence=f"{intent} evidence")
+
+
+def test_reconcile_register_beats_llm():
+    reg = SponsorRegister(["Acme Ltd"])
+    v = assess(job=job(org="Acme"), register=reg)          # On sponsor register (register)
+    out = reconcile(v, _match("negative", 0.9))
+    assert out.label == "On sponsor register" and out.eligible is True
+
+
+def test_reconcile_source_flag_beats_llm():
+    v = assess(job=job(raw={"visa_sponsorship": True}))     # Sponsors visa (source_flag)
+    out = reconcile(v, _match("unclear", 0.0))
+    assert out.label == "Sponsors visa" and out.source == "source_flag"
+
+
+def test_reconcile_llm_resolves_unclear_positive():
+    v = assess(job=job(desc="Great team."))                 # Unclear soft gate
+    out = reconcile(v, _match("sponsors", 0.8))
+    assert out.label == "Sponsors visa" and out.confidence == 0.8
+    assert out.source == "llm" and out.eligible is True
+
+
+def test_reconcile_llm_relocation_label():
+    v = assess(job=job(desc="Great team."))
+    out = reconcile(v, _match("relocation", 0.7))
+    assert out.label == "Relocation support"
+
+
+def test_reconcile_low_confidence_stays_unclear():
+    v = assess(job=job(desc="Great team."))
+    out = reconcile(v, _match("sponsors", 0.3))             # below default min_conf 0.6
+    assert out.label == "Unclear"
+
+
+def test_reconcile_llm_negative_downranks_not_drops():
+    v = assess(job=job(desc="Great team."))                 # Unclear 0.3
+    out = reconcile(v, _match("negative", 0.9))
+    assert out.eligible is True and out.label == "Unclear"
+    assert out.confidence < 0.3                             # demoted so it sorts last
+
+
+def test_reconcile_positive_keyword_not_downgraded():
+    v = assess(job=job(desc="We offer relocation assistance."))  # Relocation support (keyword)
+    out = reconcile(v, _match("negative", 0.9))
+    assert out.eligible is True and out.label == "Relocation support"
 
 
 def test_normalize_org_strips_suffixes():

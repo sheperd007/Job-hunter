@@ -15,8 +15,14 @@ def _rt(text: str) -> dict:
 
 
 def build_properties(job: Job, match: MatchResult, visa: VisaVerdict,
-                     discovered: str) -> dict:
-    notes = (f"Match {match.score}/100 — {match.rationale}\n"
+                     discovered: str, effective_score: int | None = None) -> dict:
+    # "Match score" is the Notion view's sort key. When an effective (visa-aware)
+    # score is supplied, write that so relocation/visa jobs rise to the top; keep
+    # the raw fit visible in Notes for transparency.
+    shown = match.score if effective_score is None else effective_score
+    notes = (f"Match {match.score}/100"
+             + ("" if effective_score is None else f" (effective {effective_score})")
+             + f" — {match.rationale}\n"
              f"Visa: {visa.label} ({visa.confidence:.0%}) — {visa.evidence}\n"
              f"Org: {job.org}")
     props: dict = {
@@ -24,7 +30,7 @@ def build_properties(job: Job, match: MatchResult, visa: VisaVerdict,
         "Vacancy link": {"url": job.url or None},
         "Stage": {"select": {"name": "To apply"}},
         "Location": _rt(job.location),
-        "Match score": {"number": match.score},
+        "Match score": {"number": shown},
         "Priority": {"select": {"name": match.priority}},
         "Visa support": {"select": {"name": visa.label}},
         "Source": {"select": {"name": job.source or "Other"}},
@@ -42,11 +48,13 @@ def build_properties(job: Job, match: MatchResult, visa: VisaVerdict,
 
 async def create_page(job: Job, match: MatchResult, visa: VisaVerdict, *,
                       token: str, database_id: str, version: str,
-                      discovered: str, dry_run: bool = False) -> dict:
+                      discovered: str, dry_run: bool = False,
+                      effective_score: int | None = None) -> dict:
     if dry_run:
         return {"dry_run": True, "title": job.title}
     payload = {"parent": {"database_id": database_id},
-               "properties": build_properties(job, match, visa, discovered)}
+               "properties": build_properties(job, match, visa, discovered,
+                                              effective_score=effective_score)}
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(_API, headers={
             "Authorization": f"Bearer {token}",

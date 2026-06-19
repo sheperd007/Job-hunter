@@ -1,5 +1,7 @@
 import pytest
-from worker.pipeline import run_discovery, load_register, _interleave
+from worker.pipeline import (run_discovery, load_register, _interleave,
+                             _google_queries, resolve_register_url)
+from worker.visa import SponsorRegister
 
 
 def test_interleave_round_robins_sources():
@@ -64,10 +66,24 @@ def jobs():
 
 
 async def _notion_collector(calls):
-    async def _create(job, m, v, *, discovered):
+    async def _create(job, m, v, *, discovered, effective_score=None):
         calls.append(job.url)
         return {"url": f"https://notion.so/{job.title}"}
     return _create
+
+
+def _flagged(i):
+    # source visa_sponsorship flag -> verdict confidence 0.85
+    return Job(title=f"F{i}", org=f"O{i}", url=f"https://x.com/f{i}",
+               source="google_jobs", region="EU", track_hint="industry",
+               description="great team", raw={"visa_sponsorship": True})
+
+
+def _unclear(i):
+    # no signal -> soft-gate "Unclear" 0.3
+    return Job(title=f"U{i}", org=f"O{i}", url=f"https://x.com/u{i}",
+               source="google_jobs", region="EU", track_hint="industry",
+               description="great team")
 
 
 @pytest.mark.asyncio
@@ -186,6 +202,92 @@ async def test_below_threshold_jobs_marked_seen_not_rescored():
 
 
 @pytest.mark.asyncio
+async def test_run_discovery_scores_signal_bearing_jobs_first():
+    # Two-phase: visa-signal jobs are scored before "Unclear" ones, so the per-run
+    # cap is spent on likely-relocation roles.
+    store = InMemorySeenStore()
+    calls = []
+    notion_create = await _notion_collector(calls)
+    mixed = [_unclear(0), _unclear(1), _flagged(0), _flagged(1)]
+    out = await run_discovery(jobs=mixed, profile={}, gateway=FakeGateway(85),
+                              store=store, notion_create=notion_create,
+                              discovered="2026-06-12", min_score=60, max_match=2)
+    assert out["capped"] is True
+    assert set(calls) == {"https://x.com/f0", "https://x.com/f1"}   # flagged scored first
+
+
+@pytest.mark.asyncio
+async def test_effective_score_boosts_sponsor_over_unclear():
+    recorded = {}
+
+    async def notion_create(job, m, v, *, discovered, effective_score=None):
+        recorded[job.url] = effective_score
+        return {"url": "n"}
+
+    store = InMemorySeenStore()
+    await run_discovery(jobs=[_unclear(0), _flagged(0)], profile={},
+                        gateway=FakeGateway(70), store=store,
+                        notion_create=notion_create, discovered="2026-06-12",
+                        min_score=60, visa_rank_weight=20)
+    assert recorded["https://x.com/f0"] > recorded["https://x.com/u0"]
+
+
+@pytest.mark.asyncio
+async def test_run_discovery_llm_upgrades_unclear_visa():
+    captured = {}
+
+    async def notion_create(job, m, v, *, discovered, effective_score=None):
+        captured[job.url] = v
+        return {"url": "n"}
+
+    class VisaGW:
+        async def complete(self, task, messages):
+            return {"content": '{"score": 75, "visa": {"intent": "sponsors", '
+                               '"confidence": 0.9, "evidence": "we sponsor"}}'}
+
+    store = InMemorySeenStore()
+    await run_discovery(jobs=[_unclear(0)], profile={}, gateway=VisaGW(),
+                        store=store, notion_create=notion_create,
+                        discovered="2026-06-12", min_score=60, visa_rank_weight=20)
+    v = captured["https://x.com/u0"]
+    assert v.label == "Sponsors visa" and v.source == "llm"
+
+
+@pytest.mark.asyncio
+async def test_run_discovery_register_visa_survives_llm_negative():
+    captured = {}
+
+    async def notion_create(job, m, v, *, discovered, effective_score=None):
+        captured[job.url] = v
+        return {"url": "n"}
+
+    class NegGW:
+        async def complete(self, task, messages):
+            return {"content": '{"score": 75, "visa": {"intent": "negative", '
+                               '"confidence": 0.9}}'}
+
+    reg = SponsorRegister(["Acme Ltd"])
+    j = Job(title="ML", org="Acme", url="https://x.com/r", source="google_jobs",
+            region="EU", track_hint="industry", description="great team")
+    store = InMemorySeenStore()
+    await run_discovery(jobs=[j], profile={}, gateway=NegGW(), store=store,
+                        notion_create=notion_create, discovered="2026-06-12",
+                        min_score=60, register=reg, visa_rank_weight=20)
+    assert captured["https://x.com/r"].label == "On sponsor register"
+
+
+def test_google_queries_adds_visa_bias_capped():
+    out = _google_queries(["machine learning", "deep learning"],
+                          ["visa sponsorship", "relocation"], cap=3)
+    assert out == ["machine learning", "deep learning",
+                   "machine learning visa sponsorship"]
+
+
+def test_google_queries_no_suffixes_is_passthrough():
+    assert _google_queries(["a", "b"], [], cap=5) == ["a", "b"]
+
+
+@pytest.mark.asyncio
 async def test_load_register_none_when_url_unset():
     assert await load_register(_FakeSettings("")) is None
 
@@ -207,3 +309,41 @@ async def test_load_register_none_on_fetch_error():
         raise RuntimeError("404")
 
     assert await load_register(_FakeSettings("http://x/reg.csv"), fetch=boom) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_register_url_passthrough_non_sentinel():
+    assert await resolve_register_url("http://x/reg.csv") == "http://x/reg.csv"
+
+
+@pytest.mark.asyncio
+async def test_resolve_register_url_finds_csv_from_govuk_api():
+    async def fake_json(u):
+        return {"details": {"attachments": [
+            {"url": "https://assets.gov.uk/something.pdf"},
+            {"url": "https://assets.gov.uk/worker-2026-06-19.csv"}]}}
+
+    out = await resolve_register_url("govuk:workers", fetch_json=fake_json)
+    assert out.endswith("worker-2026-06-19.csv")
+
+
+@pytest.mark.asyncio
+async def test_resolve_register_url_none_on_error():
+    async def boom(u):
+        raise RuntimeError("down")
+
+    assert await resolve_register_url("govuk:workers", fetch_json=boom) is None
+
+
+@pytest.mark.asyncio
+async def test_load_register_resolves_govuk_sentinel():
+    async def fake_json(u):
+        return {"details": {"attachments": [{"url": "http://x/workers.csv"}]}}
+
+    async def fake_fetch(u):
+        assert u == "http://x/workers.csv"
+        return "Organisation Name\nAcme Ltd\n"
+
+    reg = await load_register(_FakeSettings("govuk:workers"),
+                              fetch=fake_fetch, fetch_json=fake_json)
+    assert reg is not None and reg.contains("Acme") is True

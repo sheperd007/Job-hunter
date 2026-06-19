@@ -60,7 +60,23 @@ class Settings(BaseSettings):
     # Optional licensed-sponsor register CSV (e.g. UK Home Office list). When set,
     # employers on the list are flagged "On sponsor register" (strongest visa
     # signal). Unset -> register check skipped; soft gate still surfaces jobs.
+    # Set to "govuk:workers" to auto-resolve the current UK CSV via the gov.uk
+    # content API (the filename rotates daily), or paste a direct CSV link.
+    # Best-effort: a missing/404 register never breaks discovery.
     sponsor_register_url: str = ""
+
+    # --- Visa/relocation ranking (smart-rank, no hard drops beyond explicit neg) ---
+    # Effective Notion "Match score" = clamp(raw + weight*(visa_confidence-0.5)).
+    # Pushes relocation/visa-bearing jobs to the top of the board. 0 = ranking off.
+    visa_rank_weight: int = 20
+    # Min LLM visa-intent confidence to upgrade a keyword-"Unclear" verdict.
+    llm_visa_min_conf: float = 0.6
+    # Google Jobs query bias: suffixes appended to the top base term so the source
+    # returns more relocation/visa-flavoured roles. Empty list = current behaviour.
+    visa_query_suffixes: list[str] = ["visa sponsorship", "relocation"]
+    # Hard cap on distinct Google Jobs query strings per country (credit guard).
+    # 3 = 2 base + 1 suffixed -> 3 x 5 countries = 15 credits/run.
+    google_query_cap: int = 3
 
     @property
     def dsn(self) -> str:

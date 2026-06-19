@@ -16,6 +16,19 @@ def test_settings_from_env(monkeypatch):
     assert s.openai_base_url == "https://api.openai.com/v1"  # default
 
 
+def test_visa_ranking_defaults():
+    s = Settings()
+    assert s.visa_rank_weight == 20
+    assert s.llm_visa_min_conf == 0.6
+    assert s.visa_query_suffixes == ["visa sponsorship", "relocation"]
+    assert s.google_query_cap == 3
+
+
+def test_visa_query_suffixes_env_override(monkeypatch):
+    monkeypatch.setenv("VISA_QUERY_SUFFIXES", '["relocation package"]')
+    assert Settings().visa_query_suffixes == ["relocation package"]
+
+
 def test_dsn_built_from_parts_by_default():
     s = Settings()
     assert s.dsn == "postgresql://n8n:n8n@postgres:5432/n8n"

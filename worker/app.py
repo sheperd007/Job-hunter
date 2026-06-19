@@ -87,18 +87,19 @@ async def jobs_run():
     jobs = await gather_jobs(settings)
     register = await load_register(settings)
 
-    async def notion_create(job, m, v, *, discovered):
+    async def notion_create(job, m, v, *, discovered, effective_score=None):
         return await create_page(
             job, m, v, token=settings.notion_token,
             database_id=settings.notion_applications_db,
             version=settings.notion_version, discovered=discovered,
-            dry_run=settings.dry_run)
+            dry_run=settings.dry_run, effective_score=effective_score)
 
     result = await run_discovery(
         jobs=jobs, profile=profile, gateway=_gateway(), store=store,
         notion_create=notion_create, register=register,
         max_match=settings.max_match_per_run, discovered=discovered,
-        dry_run=settings.dry_run)
+        dry_run=settings.dry_run, visa_rank_weight=settings.visa_rank_weight,
+        visa_min_conf=settings.llm_visa_min_conf)
 
     # Best-effort run-completion ping (never fails the run).
     await telegram_notify(
