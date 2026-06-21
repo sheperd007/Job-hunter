@@ -102,4 +102,13 @@ make down                                # stop everything
 ```
 
 Check spend any time: `curl -s http://localhost:8000/budget/status`
-→ `{"a": 1.23, "b": 0.40}` (USD this month per key; hard-capped at $8 each).
+→ `{"a": 1.23, "b": 0.40}` (USD this month per key; hard-stopped at
+`CAP_SAFETY_MARGIN_USD`, default $9.5 of a $10 cap).
+
+> **Hardened / shared host:** the commands above use the base compose file. On a
+> multi-user host (secrets as files, encrypted-at-rest), bring the stack up with
+> the 3-file overlay instead — see [SECURITY.md](SECURITY.md) and the
+> [cheatsheet](CHEATSHEET.md):
+> ```bash
+> docker compose -f docker-compose.yml -f docker-compose.hardened.yml -f docker-compose.telegram.yml up -d --build
+> ```

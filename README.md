@@ -13,9 +13,10 @@ A self-hosted, Dockerized agent that helps you land a visa-sponsored job abroad:
 - **Hard cost cap** — two OpenAI keys, **$10/month each, enforced in code**.
 
 > **Start here:** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) — step-by-step
-> credentials, launch, and commands. · Server commands: [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
-> · Hardening: [`docs/SECURITY.md`](docs/SECURITY.md) · Design/plan:
-> [`docs/superpowers/`](docs/superpowers/)
+> credentials, launch, and commands. · **Quick reference:**
+> [`docs/CHEATSHEET.md`](docs/CHEATSHEET.md) — deploy/ops/funnel/config/costs on one page.
+> · Server commands: [`docs/RUNBOOK.md`](docs/RUNBOOK.md) · Hardening:
+> [`docs/SECURITY.md`](docs/SECURITY.md) · Design/plan: [`docs/superpowers/`](docs/superpowers/)
 
 ## Architecture
 

@@ -176,9 +176,10 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 MODEL_TRIAGE=gpt-4.1-mini
 MODEL_MATCH=gpt-4.1
 MODEL_FALLBACK=gpt-4o-mini
-MONTHLY_CAP_USD=8.0
-CAP_SAFETY_MARGIN_USD=7.5
-DAILY_SOFT_CAP_USD=0.27
+MONTHLY_CAP_USD=10.0
+CAP_SAFETY_MARGIN_USD=9.5
+DAILY_SOFT_CAP_USD=0.33
+SPONSOR_REGISTER_URL=govuk:workers   # auto-resolves the daily UK Home Office CSV; empty = off
 TZ=Asia/Tehran
 N8N_HOST=localhost
 WEBHOOK_URL=http://localhost:5678/
