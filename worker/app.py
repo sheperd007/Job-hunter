@@ -101,12 +101,17 @@ async def jobs_run():
         dry_run=settings.dry_run, visa_rank_weight=settings.visa_rank_weight,
         visa_min_conf=settings.llm_visa_min_conf)
 
-    # Best-effort run-completion ping (never fails the run).
+    # Best-effort run-completion ping (never fails the run). Surfaces a Notion
+    # outage explicitly — previously a Notion timeout 500'd the whole request and
+    # this ping never fired, so an outage was silent (no email/Telegram at all).
+    icon = "⚠️" if result["notion_down"] else "✅"
+    status = (" — Notion unreachable, stopped early (will retry unscored jobs "
+              "next run)" if result["notion_down"] else "")
     await telegram_notify(
         settings,
-        f"✅ Job discovery finished — {result['inserted']} new job(s) in Notion "
+        f"{icon} Job discovery finished — {result['inserted']} new job(s) in Notion "
         f"(considered {result['considered']}, scored {result['scored']}"
-        f"{', cap hit' if result['capped'] else ''}).")
+        f"{', cap hit' if result['capped'] else ''}){status}.")
     return result
 
 

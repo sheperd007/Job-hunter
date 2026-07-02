@@ -177,6 +177,104 @@ async def test_run_discovery_propagates_non_budget_errors():
 
 
 @pytest.mark.asyncio
+async def test_run_discovery_stops_gracefully_on_notion_outage():
+    # A Notion connect failure (ConnectTimeout etc, all subclass httpx.HTTPError)
+    # must not 500 the whole run: LLM cost for already-scored jobs is kept, the
+    # run returns cleanly, and the caller (the /jobs/run 500s + Telegram ping
+    # never firing) is what this guards against.
+    import httpx
+
+    async def flaky_notion(job, m, v, *, discovered, effective_score=None):
+        raise httpx.ConnectTimeout("boom")
+
+    store = InMemorySeenStore()
+    out = await run_discovery(jobs=eligible_jobs(5), profile={}, gateway=CountingGateway(85),
+                              store=store, notion_create=flaky_notion,
+                              discovered="2026-06-12", min_score=60)
+    assert out["inserted"] == 0
+    assert out["notion_down"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_discovery_stops_scoring_after_first_notion_failure():
+    # Notion being down is systemic, not per-job: once it fails once, further
+    # score() calls are doomed to also fail at the Notion step, so the loop must
+    # stop immediately rather than burn the rest of the LLM budget on jobs that
+    # can never be inserted this run.
+    import httpx
+
+    async def flaky_notion(job, m, v, *, discovered, effective_score=None):
+        raise httpx.ConnectError("boom")
+
+    store = InMemorySeenStore()
+    gw = CountingGateway(85)
+    out = await run_discovery(jobs=eligible_jobs(5), profile={}, gateway=gw,
+                              store=store, notion_create=flaky_notion,
+                              discovered="2026-06-12", min_score=60)
+    assert gw.calls == 1                 # only the first (doomed) job was scored
+    assert out["notion_down"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_discovery_notion_failure_leaves_job_unmarked_for_retry():
+    # The job that failed to insert must NOT be marked seen — otherwise it's lost
+    # forever even though it was never actually written to Notion.
+    import httpx
+
+    async def flaky_notion(job, m, v, *, discovered, effective_score=None):
+        raise httpx.ConnectTimeout("boom")
+
+    store = InMemorySeenStore()
+    jb = eligible_jobs(1)
+    await run_discovery(jobs=jb, profile={}, gateway=CountingGateway(85),
+                        store=store, notion_create=flaky_notion,
+                        discovered="2026-06-12", min_score=60)
+    assert store.is_seen(jb[0].url) is False
+
+
+@pytest.mark.asyncio
+async def test_run_discovery_keeps_inserts_before_notion_outage():
+    # If Notion fails partway through a run (e.g. after succeeding a few times),
+    # everything inserted before the failure is kept, not rolled back.
+    import httpx
+
+    calls = []
+    good = await _notion_collector(calls)
+
+    class FlakyAfterN:
+        def __init__(self, n):
+            self.n = n
+            self.calls = 0
+
+        async def __call__(self, job, m, v, *, discovered, effective_score=None):
+            self.calls += 1
+            if self.calls > self.n:
+                raise httpx.ConnectTimeout("boom")
+            return await good(job, m, v, discovered=discovered, effective_score=effective_score)
+
+    store = InMemorySeenStore()
+    out = await run_discovery(jobs=eligible_jobs(5), profile={}, gateway=CountingGateway(85),
+                              store=store, notion_create=FlakyAfterN(2),
+                              discovered="2026-06-12", min_score=60)
+    assert out["inserted"] == 2
+    assert out["notion_down"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_discovery_propagates_non_notion_notion_create_errors():
+    # A bug inside the injected notion_create (not a network/API failure) must
+    # still surface, not be silently treated as "Notion is down".
+    async def buggy_notion(job, m, v, *, discovered, effective_score=None):
+        raise TypeError("bug: missing arg")
+
+    store = InMemorySeenStore()
+    with pytest.raises(TypeError):
+        await run_discovery(jobs=eligible_jobs(1), profile={}, gateway=CountingGateway(85),
+                            store=store, notion_create=buggy_notion,
+                            discovered="2026-06-12", min_score=60)
+
+
+@pytest.mark.asyncio
 async def test_below_threshold_jobs_marked_seen_not_rescored():
     # A scored-but-rejected job is marked seen (notion_page_url=None) so it is not
     # re-scored on later runs — bounds cost and stops the cap being eaten by the

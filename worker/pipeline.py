@@ -4,6 +4,7 @@ run_discovery() is the pure, injectable core (deps passed in -> unit-tested with
 fakes). gather_jobs() is the runtime glue that calls the real source clients.
 """
 from itertools import zip_longest
+import httpx
 from worker.dedupe import filter_new, content_key_for
 from worker.normalize import in_target_region
 from worker.visa import assess, reconcile, SponsorRegister
@@ -32,6 +33,7 @@ async def run_discovery(*, jobs, profile, gateway, store, notion_create,
     inserted: list[dict] = []
     scored = 0
     capped = False
+    notion_down = False
     dropped = {"region": 0, "visa": 0, "score": 0}
 
     # Phase 1: cheap region + visa gate on every new job (pure, no LLM). Collect the
@@ -86,8 +88,19 @@ async def run_discovery(*, jobs, profile, gateway, store, notion_create,
         # no extra cost), then compute the visa-aware Notion ranking score.
         v = reconcile(v, m, min_conf=visa_min_conf)
         eff = effective_score(m.score, v.confidence, visa_rank_weight)
-        res = await notion_create(job, m, v, discovered=discovered,
-                                  effective_score=eff if visa_rank_weight else None)
+        try:
+            res = await notion_create(job, m, v, discovered=discovered,
+                                      effective_score=eff if visa_rank_weight else None)
+        except httpx.HTTPError:
+            # Notion connect/API failure (timeout, DNS, 5xx, ...). This job's LLM
+            # cost is already spent and unrecoverable this run, but it must NOT be
+            # marked seen — it was never written to Notion, so it has to be
+            # retried on the next run. Outage is systemic, not per-job: stop the
+            # loop now instead of burning the rest of the cap on doomed calls.
+            # A bug in the injected notion_create itself (not httpx.HTTPError)
+            # still propagates — only network/API failures are treated as "down".
+            notion_down = True
+            break
         store.mark(url=job.url, title=job.title, org=job.org, source=job.source,
                    notion_page_url=res.get("url"), content_key=ckey)
         inserted.append({"title": job.title, "url": job.url, "score": m.score,
@@ -95,8 +108,8 @@ async def run_discovery(*, jobs, profile, gateway, store, notion_create,
 
     return {"considered": len(jobs), "new": len(new), "eligible": eligible,
             "scored": scored, "inserted": 0 if dry_run else len(inserted),
-            "dropped": dropped, "capped": capped, "dry_run": dry_run,
-            "items": inserted}
+            "dropped": dropped, "capped": capped, "notion_down": notion_down,
+            "dry_run": dry_run, "items": inserted}
 
 
 # gov.uk content API for the UK Home Office "Register of licensed sponsors:
