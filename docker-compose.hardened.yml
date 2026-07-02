@@ -61,10 +61,16 @@ services:
 
   n8n:
     environment:
-      DB_POSTGRESDB_PASSWORD: ""   # blank the base plaintext; the _FILE value wins
+      # null (NOT "") unsets the base plaintext key entirely. Unlike Postgres's
+      # bash entrypoint (which treats "" as falsy and falls back to _FILE), n8n's
+      # own _FILE reader treats an explicitly-set "" as "already provided" and
+      # never reads the file -> n8n boots with an empty DB password and crash-loops
+      # (SASL "client password must be a string"); an empty basic-auth password
+      # would be a silent auth bypass. null removes the key so only _FILE applies.
+      DB_POSTGRESDB_PASSWORD: null
       DB_POSTGRESDB_PASSWORD_FILE: /run/secrets/db_password
       N8N_ENCRYPTION_KEY_FILE: /run/secrets/n8n_encryption_key
-      N8N_BASIC_AUTH_PASSWORD: ""  # blank any .env value; the _FILE value wins
+      N8N_BASIC_AUTH_PASSWORD: null
       N8N_BASIC_AUTH_PASSWORD_FILE: /run/secrets/n8n_basic_auth_password
     secrets:
       - db_password
